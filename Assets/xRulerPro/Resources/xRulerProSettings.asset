@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ea0f169b906aaa24b8d7756a3503704c, type: 3}
+  m_Name: xRulerProSettings
+  m_EditorClassIdentifier: 
+  currentUnit: 2
+  xAxisColor: {r: 1, g: 0, b: 0, a: 1}
+  yAxisColor: {r: 0, g: 1, b: 0, a: 1}
+  zAxisColor: {r: 0, g: 0, b: 1, a: 1}
+  lineColor: {r: 1, g: 1, b: 1, a: 1}
+  lineThickness: 2
+  textSize: 12
+  referenceObjectSize: 1
+  referenceObjectColor: {r: 1, g: 1, b: 1, a: 0.3}
+  enableMeasurementMode: 1
