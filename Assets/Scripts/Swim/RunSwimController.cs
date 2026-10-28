@@ -94,11 +94,13 @@ public class RunSwimController : MonoBehaviour
         characterController.stepOffset = 0.3f;
         characterController.minMoveDistance = 0.0f;
 
-        // 2. Prevent Rigidbody physics interference if present
-        if (TryGetComponent<Rigidbody>(out var rb))
+        // 2. Prevent Rigidbody physics interference if present, or add kinematic Rigidbody for triggers
+        if (!TryGetComponent<Rigidbody>(out var rb))
         {
-            rb.isKinematic = true;
+            rb = gameObject.AddComponent<Rigidbody>();
         }
+        rb.isKinematic = true;
+        rb.useGravity = false;
 
         // 3. Cache Animator and hashes
         if (animator == null)
@@ -112,6 +114,32 @@ public class RunSwimController : MonoBehaviour
 
         // 5. Disable solid colliders on road stripes if any exist
         DisableStripeColliders();
+    }
+
+    private void OnEnable()
+    {
+        if (targetCamera == null)
+        {
+            targetCamera = Camera.main;
+        }
+
+        verticalVelocity = 0.0f;
+        isGrounded = true;
+
+        if (animator != null)
+        {
+            if (hasIsGrounded) animator.SetBool(isGroundedHash, true);
+            if (hasIsRunning) animator.SetBool(isRunningHash, false);
+            if (hasIsIdle) animator.SetBool(isIdleHash, true);
+        }
+
+#if ENABLE_INPUT_SYSTEM
+        if (inputActions != null)
+        {
+            var playerMap = inputActions.FindActionMap("Player");
+            playerMap?.Enable();
+        }
+#endif
     }
 
     private void Start()
@@ -187,17 +215,6 @@ public class RunSwimController : MonoBehaviour
                 jumpAction = playerMap.FindAction("Jump");
                 playerMap.Enable();
             }
-        }
-#endif
-    }
-
-    private void OnEnable()
-    {
-#if ENABLE_INPUT_SYSTEM
-        if (inputActions != null)
-        {
-            var playerMap = inputActions.FindActionMap("Player");
-            playerMap?.Enable();
         }
 #endif
     }

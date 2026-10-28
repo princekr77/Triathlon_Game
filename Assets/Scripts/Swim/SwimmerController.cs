@@ -127,7 +127,23 @@ public class SwimmerController : MonoBehaviour
             }
         }
 
-        // 4. Setup Input Actions
+        // 4. Ensure kinematic Rigidbody and trigger Collider for zone interactions
+        if (!TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb = gameObject.AddComponent<Rigidbody>();
+        }
+        rb.isKinematic = true;
+        rb.useGravity = false;
+
+        if (!TryGetComponent<Collider>(out var col))
+        {
+            var box = gameObject.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.size = new Vector3(2.0f, 1.0f, 2.5f);
+            box.center = new Vector3(0f, 0f, 0f);
+        }
+
+        // 5. Setup Input Actions
         SetupInputActions();
 
         currentForwardSpeed = baseSwimSpeed;
@@ -136,6 +152,31 @@ public class SwimmerController : MonoBehaviour
         {
             currentHeadingYaw = 180f; // Default facing -Z along water corridor
         }
+    }
+
+    private void OnEnable()
+    {
+        if (mainCam == null)
+        {
+            mainCam = Camera.main;
+        }
+
+        currentForwardSpeed = autoMoveForward ? baseSwimSpeed : 0.0f;
+        SnapToWaterSurface();
+
+        if (animator != null)
+        {
+            if (hasIsSwimmingParam) animator.SetBool(isSwimmingHash, true);
+            animator.Play(swimStateName, 0, 0f);
+        }
+
+#if ENABLE_INPUT_SYSTEM
+        if (inputActions != null)
+        {
+            var playerMap = inputActions.FindActionMap("Player");
+            playerMap?.Enable();
+        }
+#endif
     }
 
     private void Start()
@@ -176,17 +217,6 @@ public class SwimmerController : MonoBehaviour
                 moveAction = playerMap.FindAction("Move");
                 playerMap.Enable();
             }
-        }
-#endif
-    }
-
-    private void OnEnable()
-    {
-#if ENABLE_INPUT_SYSTEM
-        if (inputActions != null)
-        {
-            var playerMap = inputActions.FindActionMap("Player");
-            playerMap?.Enable();
         }
 #endif
     }

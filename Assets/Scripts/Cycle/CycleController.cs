@@ -62,7 +62,11 @@ public class CycleController : MonoBehaviour
         // Pedaling animation speed follows movement speed
         if (pedalingAnimator != null)
         {
+#if UNITY_6000_0_OR_NEWER
             float speed01 = Mathf.InverseLerp(0f, baseSpeed * 1.5f, rb.linearVelocity.magnitude);
+#else
+            float speed01 = Mathf.InverseLerp(0f, baseSpeed * 1.5f, rb.velocity.magnitude);
+#endif
             pedalingAnimator.speed = Mathf.Lerp(0.3f, 2.0f, speed01) * animSpeedScale;
         }
     }
@@ -74,7 +78,11 @@ public class CycleController : MonoBehaviour
         raceFinished = true;
         if (rb != null)
         {
+#if UNITY_6000_0_OR_NEWER
             rb.linearVelocity = Vector3.zero;
+#else
+            rb.velocity = Vector3.zero;
+#endif
             rb.isKinematic = true;
         }
 
