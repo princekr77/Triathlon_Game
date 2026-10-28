@@ -1,7 +1,14 @@
 fileFormatVersion: 2
 guid: e5efb24588fd5f1d58298a24df5ee158
+AssetOrigin:
+  serializedVersion: 1
+  productId: 316532
+  packageName: Easy Bike System
+  packageVersion: 2.0.1
+  assetPath: Assets/RayznGames/BicycleSystem/HDRP/Models/Rag_RIg_Model_HDRP.fbx
+  uploadId: 917260
 ModelImporter:
-  serializedVersion: 24200
+  serializedVersion: 24300
   internalIDToNameTable: []
   externalObjects:
   - first:
@@ -14,6 +21,7 @@ ModelImporter:
     materialName: 0
     materialSearch: 1
     materialLocation: 1
+    searchTexturesGlobally: 1
   animations:
     legacyGenerateAnimations: 4
     bakeSimulation: 0
@@ -162,8 +170,7 @@ ModelImporter:
     - name: Thumb_L.2
       parentName: Thumb_L.1
       position: {x: 0.00000013987301, y: 0.06615752, z: -0.000000012572855}
-      rotation: {x: -0.0000002085559, y: 0.0000000065367316, z: -0.00000029243515,
-        w: 1}
+      rotation: {x: -0.0000002085559, y: 0.0000000065367316, z: -0.00000029243515, w: 1}
       scale: {x: 1.0000001, y: 0.9999997, z: 1}
     - name: Thumb_L.2_end
       parentName: Thumb_L.2
@@ -434,7 +441,7 @@ ModelImporter:
     skeletonHasParents: 1
   lastHumanDescriptionAvatarSource: {instanceID: 0}
   autoGenerateAvatarMappingIfUnspecified: 1
-  animationType: 2
+  animationType: 3
   humanoidOversampling: 1
   avatarSetup: 1
   addHumanoidExtraRootOnlyWhenUsingAvatar: 1
@@ -444,10 +451,3 @@ ModelImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 316532
-  packageName: Easy Bike System
-  packageVersion: 2.0.1
-  assetPath: Assets/RayznGames/BicycleSystem/HDRP/Models/Rag_RIg_Model_HDRP.fbx
-  uploadId: 917260

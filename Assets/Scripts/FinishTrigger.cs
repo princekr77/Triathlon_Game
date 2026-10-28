@@ -6,6 +6,9 @@ public class FinishTrigger : MonoBehaviour
     [Tooltip("Tag of the player object that triggers finish.")]
     public string playerTag = "Player";
 
+    [Tooltip("Next scene to load when crossing the finish line.")]
+    public string nextScene = "Swim_Scene";
+
     private bool triggered = false;
 
     void Reset()
@@ -17,18 +20,25 @@ public class FinishTrigger : MonoBehaviour
     {
         if (triggered) return;
 
-        // Check if the collider is GroundControlContact, player, or belongs to the bike
+        // Check if the collider belongs to cycle or runner
         CycleController cycle = other.GetComponentInParent<CycleController>();
         if (cycle == null && other.transform.root != null)
         {
             cycle = other.transform.root.GetComponent<CycleController>();
         }
 
+        RunnerController runner = other.GetComponentInParent<RunnerController>();
+        if (runner == null && other.transform.root != null)
+        {
+            runner = other.transform.root.GetComponent<RunnerController>();
+        }
+
         bool isGroundContact = other.gameObject.name.Contains("GroundControlContact");
         bool isPlayer = other.CompareTag(playerTag)
                      || (other.transform.root != null && other.transform.root.CompareTag(playerTag))
                      || isGroundContact
-                     || cycle != null;
+                     || cycle != null
+                     || runner != null;
 
         if (!isPlayer) return;
 
@@ -39,18 +49,22 @@ public class FinishTrigger : MonoBehaviour
         {
             cycle.TriggerFinish();
         }
+        else if (runner != null)
+        {
+            runner.CompleteStage();
+        }
         else
         {
-            // Direct fallback transition if CycleController was not found
+            // Direct fallback transition
             if (TransitionManager.Instance != null)
             {
                 TransitionManager.Instance.BeginTransition(
-                    nextScene: "Swim_Scene",
+                    nextScene: nextScene,
                     onComplete: () => {
                         if (GameManager.I != null)
-                            GameManager.I.LoadScene("Swim_Scene");
+                            GameManager.I.LoadScene(nextScene);
                         else
-                            UnityEngine.SceneManagement.SceneManager.LoadScene("Swim_Scene");
+                            UnityEngine.SceneManagement.SceneManager.LoadScene(nextScene);
                     }
                 );
             }
