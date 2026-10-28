@@ -33,12 +33,19 @@ public class FinishTrigger : MonoBehaviour
             runner = other.transform.root.GetComponent<RunnerController>();
         }
 
+        RunSwimController runSwim = other.GetComponentInParent<RunSwimController>();
+        if (runSwim == null && other.transform.root != null)
+        {
+            runSwim = other.transform.root.GetComponent<RunSwimController>();
+        }
+
         bool isGroundContact = other.gameObject.name.Contains("GroundControlContact");
         bool isPlayer = other.CompareTag(playerTag)
                      || (other.transform.root != null && other.transform.root.CompareTag(playerTag))
                      || isGroundContact
                      || cycle != null
-                     || runner != null;
+                     || runner != null
+                     || runSwim != null;
 
         if (!isPlayer) return;
 
@@ -55,7 +62,7 @@ public class FinishTrigger : MonoBehaviour
         }
         else
         {
-            // Direct fallback transition
+            // Direct transition to next scene (Cycle_Scene)
             if (TransitionManager.Instance != null)
             {
                 TransitionManager.Instance.BeginTransition(
@@ -67,6 +74,13 @@ public class FinishTrigger : MonoBehaviour
                             UnityEngine.SceneManagement.SceneManager.LoadScene(nextScene);
                     }
                 );
+            }
+            else
+            {
+                if (GameManager.I != null)
+                    GameManager.I.LoadScene(nextScene);
+                else
+                    UnityEngine.SceneManagement.SceneManager.LoadScene(nextScene);
             }
         }
     }

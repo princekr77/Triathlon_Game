@@ -2582,6 +2582,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5441324752955018064}
   - component: {fileID: 2757063978594661432}
+  - component: {fileID: 5441324752955018065}
   m_Layer: 0
   m_Name: Player_Swim
   m_TagString: Player
@@ -2598,7 +2599,7 @@ Transform:
   m_GameObject: {fileID: 8618697516994093549}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 814.75, y: 0.11, z: 747.62}
+  m_LocalPosition: {x: 161.3, y: 12.25, z: 470}
   m_LocalScale: {x: 3, y: 3, z: 3}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2617,7 +2618,7 @@ Animator:
   m_GameObject: {fileID: 8618697516994093549}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: e5efb24588fd5f1d58298a24df5ee158, type: 3}
-  m_Controller: {fileID: 9100000, guid: 460c2a6f89efb9d40b755014785049b2, type: 2}
+  m_Controller: {fileID: 9100000, guid: e636f75543eecf84ca19ee8f0353b86e, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -2629,6 +2630,43 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &5441324752955018065
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8618697516994093549}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8c6a51d9e23f4b8da10b45781a93e412, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SwimmerController
+  baseSwimSpeed: 4.5
+  sprintSwimSpeed: 7
+  autoMoveForward: 1
+  lateralSpeed: 5
+  rotationSmoothing: 8
+  clampToCanal: 1
+  minCanalX: 153
+  maxCanalX: 169.5
+  waterSurfaceY: 12.6
+  surfaceOffset: -0.35
+  bodyPitch: 0
+  bodyRoll: 0
+  enableWaterBobbing: 1
+  bobbingFrequency: 3.2
+  bobbingAmplitude: 0.05
+  rollSwayAmplitude: 3
+  animator: {fileID: 2757063978594661432}
+  swimStateName: Swimming
+  speedParam: Speed
+  isSwimmingParam: isSwimming
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  autoFollowCamera: 1
+  cameraOffset: {x: 0, y: 3.2, z: 6.5}
+  cameraFollowSpeed: 10
+  cameraRotationSpeed: 8
 --- !u!1 &8774229616648054595
 GameObject:
   m_ObjectHideFlags: 0
