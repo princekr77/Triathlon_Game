@@ -265,20 +265,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e411ef8e5794782a854f5c203afc739, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  controller: {fileID: 0}
-  distanceSlider: {fileID: 0}
-  distanceText: {fileID: 0}
-  staminaSlider: {fileID: 0}
-  staminaFillImage: {fileID: 0}
-  staminaText: {fileID: 0}
-  speedText: {fileID: 0}
-  cadenceSlider: {fileID: 0}
-  cadenceFillImage: {fileID: 0}
-  cadenceText: {fileID: 0}
-  statusBannerText: {fileID: 0}
-  leftPedalButton: {fileID: 0}
-  rightPedalButton: {fileID: 0}
-  autoCreateUIIfMissing: 1
 --- !u!1 &531102717
 GameObject:
   m_ObjectHideFlags: 0
@@ -405,6 +391,10 @@ PrefabInstance:
     - target: {fileID: 8029450540283575334, guid: 7e4d7c6ec7a4dfa47ae521129e04db79, type: 3}
       propertyPath: m_Controller
       value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110000000000000001, guid: 7e4d7c6ec7a4dfa47ae521129e04db79, type: 3}
+      propertyPath: baseSpeed
+      value: 15
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1606,7 +1596,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerTag: Player
-  nextScene: Swim_Scene
+  nextScene: UIScene
 --- !u!43 &1585247196
 Mesh:
   m_ObjectHideFlags: 0

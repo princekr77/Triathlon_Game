@@ -533,17 +533,7 @@
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
-                {
-                    "name": "",
-                    "id": "b1a10001-4f81-4b77-b91c-1a89047bf101",
-                    "path": "<Keyboard>/leftShift",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "PedalLeft",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
+
                 {
                     "name": "",
                     "id": "b1a10002-4f81-4b77-b91c-1a89047bf101",
@@ -566,17 +556,7 @@
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
-                {
-                    "name": "",
-                    "id": "b1a10004-4f81-4b77-b91c-1a89047bf102",
-                    "path": "<Keyboard>/space",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "PedalRight",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
+
                 {
                     "name": "",
                     "id": "b1a10005-4f81-4b77-b91c-1a89047bf102",
@@ -710,17 +690,6 @@
                     "isPartOfComposite": true
                 },
                 {
-                    "name": "AD Axis",
-                    "id": "b1a10018-4f81-4b77-b91c-1a89047bf105",
-                    "path": "1DAxis",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Steer",
-                    "isComposite": true,
-                    "isPartOfComposite": false
-                },
-                {
                     "name": "negative",
                     "id": "b1a10019-4f81-4b77-b91c-1a89047bf105",
                     "path": "<Keyboard>/a",
@@ -742,6 +711,7 @@
                     "isComposite": false,
                     "isPartOfComposite": true
                 },
+
                 {
                     "name": "",
                     "id": "b1a10017-4f81-4b77-b91c-1a89047bf105",

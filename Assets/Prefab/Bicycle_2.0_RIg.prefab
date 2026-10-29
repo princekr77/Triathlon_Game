@@ -7616,6 +7616,7 @@ MonoBehaviour:
   standHipForward: 0.06
   showHUD: 1
   showTouchButtons: 1
+  nextSceneName: UIScene
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
 --- !u!1 &3936606093174431484
 GameObject:

@@ -8,30 +8,27 @@ using rayzngames;
 
 /// <summary>
 /// Cycling Stage (Cadence + Stamina + Rhythm Timing)
-/// Complete Implementation of Specifications 5.1, 5.2, 5.4, 5.5:
+/// Complete Implementation of Specifications 5.1, 5.2, 5.3:
 /// 
-/// 1. Pedaling & Marker Timing:
-///    - Pressing Space (or Left Shift / Touch Buttons) pedals the bike and evaluates timing against the rhythm marker.
-///    - PERFECT (green zone): Speed burst (1.25x), +2.0 cadence, adds to streak (5 PERFECT -> +5 Stamina).
-///    - GOOD (yellow zone): Normal stroke, streak resets.
-///    - MISS (outside): Weak stroke, streak resets.
+/// 1. Steering:
+///    - A / D keys (and Left / Right Arrows) steer Left and Right respectively.
+///    - Swiping horizontally on screen also steers.
+///    - A and D are completely dedicated to steering (NOT pedaling).
 /// 
-/// 2. Steering (Separated from pedaling):
-///    - A/D or Left/Right Arrow on Keyboard.
-///    - Touch drag/swipe horizontally on screen.
+/// 2. Pedaling:
+///    - Windows (Keyboard): Mash Spacebar to pedal and hit the rhythm marker.
+///    - Android (Touch): Click Left Pedal and Right Pedal buttons on screen.
+///      Alternating Left -> Right adds +2.0 cadence. Clicking the same paddle twice in a row halves cadence (anti-cheese).
 /// 
-/// 3. Anti-Cheese:
-///    - Repeating the exact same input twice in a row (or spamming Space faster than 0.12s) halves cadence.
+/// 3. Marker Rhythm Timing (Space / Rhythm Hit):
+///    - When marker in green -> PERFECT (Speed Burst 1.25x + streak count toward +5 Stamina).
+///    - When in yellow -> GOOD (streak resets).
+///    - Outside -> MISS (streak resets).
 /// 
-/// 4. Stamina Drain & Regen (5.4):
-///    - Drain (cadence >= 1.0): stamina -= (1.5 + 2.0 * cadence / cadenceMax) * dt
-///    - Coasting (cadence < 1.0): stamina += 0.5 * dt
-///    - Exhaustion (stamina <= 0): speed locked to 30%, stamina += 1.0 * dt until 20.
-/// 
-/// 5. Single Unified HUD:
-///    - Distance progress bar, Stamina bar, Speed readout, Cadence meter, Rhythm marker bar, Streak counter.
-///    - Android on-screen pedal buttons.
-///    - Finish line collider & distance trigger -> Transitions to "Swim_Scene".
+/// 4. Stamina & Transitions:
+///    - Inherits cross-stage stamina from GameManager.
+///    - Exhaustion recovery at stamina <= 0 (locked to 30% speed, recovers +1/s until 20).
+///    - On Finish: Transitions to "UIScene" with calculated stage time, total time, total score, and stamina breakdown.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class CyclingCadenceController : CycleController
@@ -59,17 +56,17 @@ public class CyclingCadenceController : CycleController
     [Tooltip("Total race distance in meters before finish (default 1000m).")]
     public float targetDistance = 1000.0f;
 
-    [Header("5.4 Stamina Configuration")]
+    [Header("5.1 & 5.4 Stamina Configuration")]
     [Tooltip("Maximum stamina.")]
     public float staminaMax = 100.0f;
 
-    [Tooltip("Passive stamina regeneration per second when coasting (cadence < 1.0).")]
+    [Tooltip("Passive stamina regeneration per second when no pedal input (cadence < 1.0).")]
     public float passiveStaminaRegen = 0.5f;
 
     [Tooltip("Stamina recovery rate per second during exhaustion (until 20).")]
     public float exhaustionRegenRate = 1.0f;
 
-    [Header("Rhythm Timing Marker (§2.4 & §5.1)")]
+    [Header("PERFECT Rhythm Timing (§2.4 & §5.1)")]
     [Tooltip("Speed of rhythm marker back-and-forth oscillation.")]
     public float rhythmBarSpeed = 1.25f;
 
@@ -88,9 +85,12 @@ public class CyclingCadenceController : CycleController
     [Tooltip("Duration in seconds of the PERFECT speed burst.")]
     public float burstDuration = 1.2f;
 
-    [Header("Windows Input Options")]
-    [Tooltip("If true, pressing Spacebar alone pedals (alternates left/right per press; anti-cheese triggers if pressed < 0.12s spam). If false, alternate Left Shift and Spacebar.")]
-    public bool allowSingleKeySpaceMash = true;
+    [Header("Downhill / Uphill Modifiers")]
+    [Tooltip("Speed boost multiplier when holding W (Stand uphill boost).")]
+    public float standSpeedMultiplier = 1.15f;
+
+    [Tooltip("Speed boost multiplier when holding S (Lean downhill aero tuck).")]
+    public float leanSpeedMultiplier = 1.10f;
 
     [Header("Steering Configuration")]
     [Tooltip("Steering turn responsiveness/speed.")]
@@ -106,11 +106,15 @@ public class CyclingCadenceController : CycleController
     public float standHipForward = 0.06f;
 
     [Header("HUD Display Settings")]
-    [Tooltip("Show the Section 5.5 unified HUD overlay.")]
+    [Tooltip("Show the Section 5.3 unified HUD overlay.")]
     public bool showHUD = true;
 
-    [Tooltip("Show on-screen touch buttons for Android (Left Zone & Right Zone).")]
+    [Tooltip("Show on-screen touch buttons for Android (Left / Right Pedals, Space Rhythm).")]
     public bool showTouchButtons = true;
+
+    [Header("Next Scene on Finish")]
+    [Tooltip("Next scene to load when cycle stage finishes (default: UIScene).")]
+    public string nextSceneName = "UIScene";
 
     // Runtime state
     [Header("Runtime State (Read Only)")]
@@ -119,15 +123,17 @@ public class CyclingCadenceController : CycleController
     [SerializeField] private float currentSpeed = 3.6f;
     [SerializeField] private float finalSpeed = 3.6f;
     [SerializeField] private float distanceTraveled = 0.0f;
+    [SerializeField] private float elapsedStageTime = 0.0f;
     [SerializeField] private float steerVal = 0.0f;
     [SerializeField] private int perfectStreak = 0;
     [SerializeField] private bool isExhausted = false;
     [SerializeField] private bool isStanding = false;
+    [SerializeField] private bool isLeaning = false;
     [SerializeField] private PedalSide lastPedal = PedalSide.None;
     [SerializeField] private bool antiCheeseTriggered = false;
 
     // Rhythm and Feedback State
-    private float rhythmMarkerPos = 0.5f; // sweeps 0.0 to 1.0
+    private float rhythmMarkerPos = 0.5f;
     private float burstTimer = 0f;
     private TimingResult lastTimingResult = TimingResult.None;
     private float timingFeedbackTimer = 0f;
@@ -150,12 +156,11 @@ public class CyclingCadenceController : CycleController
 
     // Input actions
     public InputActionAsset inputActions;
-    private InputAction pedalLeftAction;
-    private InputAction pedalRightAction;
-    private InputAction standPedalAction;
     private InputAction steerAction;
+    private InputAction rhythmHitAction;
+    private InputAction standPedalAction;
 
-    // Accessors
+    // Public accessors
     public float Cadence => cadence;
     public float CadenceMax => cadenceMax;
     public float Stamina => stamina;
@@ -163,6 +168,7 @@ public class CyclingCadenceController : CycleController
     public float FinalSpeed => finalSpeed;
     public float DistanceTraveled => distanceTraveled;
     public float TargetDistance => targetDistance;
+    public float ElapsedStageTime => elapsedStageTime;
     public int PerfectStreak => perfectStreak;
     public bool IsExhausted => isExhausted;
     public bool AntiCheeseTriggered => antiCheeseTriggered;
@@ -173,11 +179,11 @@ public class CyclingCadenceController : CycleController
         rbComponent = GetComponent<Rigidbody>();
         bicycleVehicle = GetComponent<BicycleVehicle>();
 
-        // Disable legacy BikeControlsExample
+        // Disable legacy controls if present
         var oldControls = GetComponent<BikeControlsExample>();
         if (oldControls != null) oldControls.enabled = false;
 
-        // Ensure bicycle vehicle is enabled and responsive
+        // Ensure vehicle controller is active
         if (bicycleVehicle != null)
         {
             bicycleVehicle.InControl(true);
@@ -206,11 +212,14 @@ public class CyclingCadenceController : CycleController
         var boxCol = GetComponent<BoxCollider>();
         if (boxCol != null) boxCol.isTrigger = true;
 
-        // Sync with GameManager
+        // Carry over cross-stage stamina from GameManager
         if (GameManager.I != null)
         {
-            stamina = GameManager.I.stamina;
-            perfectStreak = GameManager.I.perfectStreak;
+            if (GameManager.I.stamina > 0f)
+            {
+                stamina = Mathf.Clamp(GameManager.I.stamina, 0f, staminaMax);
+            }
+            perfectStreak = 0; // Streak reset on transition (§5.2)
             targetDistance = GameManager.CycleDistance > 0 ? GameManager.CycleDistance : targetDistance;
         }
 
@@ -239,36 +248,29 @@ public class CyclingCadenceController : CycleController
             var pMap = inputActions.FindActionMap("Player");
             if (pMap != null)
             {
-                pedalLeftAction = pMap.FindAction("PedalLeft");
-                pedalRightAction = pMap.FindAction("PedalRight");
-                standPedalAction = pMap.FindAction("StandPedal");
                 steerAction = pMap.FindAction("Steer");
+                rhythmHitAction = pMap.FindAction("Brake");
+                standPedalAction = pMap.FindAction("StandPedal");
             }
         }
     }
 
     void EnableInputs()
     {
-        if (pedalLeftAction != null)
+        if (steerAction != null) steerAction.Enable();
+        if (rhythmHitAction != null)
         {
-            pedalLeftAction.started += ctx => PerformPedalStrokeWithTiming(PedalSide.Left);
-            pedalLeftAction.Enable();
-        }
-        if (pedalRightAction != null)
-        {
-            pedalRightAction.started += ctx => HandleSpacebarPedalInput();
-            pedalRightAction.Enable();
+            rhythmHitAction.started += ctx => HandleSpacebarPedalInput();
+            rhythmHitAction.Enable();
         }
         if (standPedalAction != null) standPedalAction.Enable();
-        if (steerAction != null) steerAction.Enable();
     }
 
     void DisableInputs()
     {
-        if (pedalLeftAction != null) pedalLeftAction.Disable();
-        if (pedalRightAction != null) pedalRightAction.Disable();
-        if (standPedalAction != null) standPedalAction.Disable();
         if (steerAction != null) steerAction.Disable();
+        if (rhythmHitAction != null) rhythmHitAction.Disable();
+        if (standPedalAction != null) standPedalAction.Disable();
     }
 
     protected override void FixedUpdate()
@@ -285,12 +287,17 @@ public class CyclingCadenceController : CycleController
             bicycleVehicle.ConstrainRotation(bicycleVehicle.OnGround());
         }
 
-        // Apply forward linear velocity to rigidbody
+        // Apply forward linear velocity cleanly to rigidbody
         if (rbComponent != null)
         {
             Vector3 vel = moveDir * finalSpeed;
+#if UNITY_6000_0_OR_NEWER
             vel.y = rbComponent.linearVelocity.y; // Keep natural gravity
             rbComponent.linearVelocity = vel;
+#else
+            vel.y = rbComponent.velocity.y;
+            rbComponent.velocity = vel;
+#endif
         }
     }
 
@@ -298,6 +305,7 @@ public class CyclingCadenceController : CycleController
     {
         if (raceFinished) return;
 
+        elapsedStageTime += Time.deltaTime;
         pressedPedalThisFrame = false;
 
         ReadSteeringAndKeyboardInputs();
@@ -316,7 +324,7 @@ public class CyclingCadenceController : CycleController
             TriggerFinish();
         }
 
-        // Timers
+        // Feedback timers
         if (antiCheeseAlertTimer > 0f)
         {
             antiCheeseAlertTimer -= Time.deltaTime;
@@ -334,7 +342,7 @@ public class CyclingCadenceController : CycleController
     }
 
     /// <summary>
-    /// Rhythm marker oscillates back and forth across [0.0, 1.0].
+    /// Rhythm marker sweeps back and forth across [0.0, 1.0].
     /// </summary>
     void UpdateRhythmMarker()
     {
@@ -342,14 +350,19 @@ public class CyclingCadenceController : CycleController
     }
 
     /// <summary>
-    /// Reads A/D steering and keyboard pedal inputs.
+    /// Reads Keyboard inputs:
+    /// - A / D: Steering Left and Right exclusively (NOT pedaling)
+    /// - Left / Right Arrow keys: Steering fallback
+    /// - Space: Pedaling on Keyboard + Rhythm marker timing hit
+    /// - W hold: Stand (uphill boost)
+    /// - S hold: Lean (downhill aero tuck)
     /// </summary>
     void ReadSteeringAndKeyboardInputs()
     {
         var kb = Keyboard.current;
         var gp = Gamepad.current;
 
-        // 1. Steering (A/D or Left/Right Arrow)
+        // 1. Steering: A/D and Left/Right Arrow keys
         float targetSteer = 0f;
         if (steerAction != null)
         {
@@ -366,38 +379,35 @@ public class CyclingCadenceController : CycleController
             targetSteer += gp.leftStick.x.ReadValue();
         }
 
-        // Update steer smoothly unless touch swipe is actively overriding
+        // Steer smoothly unless touch swipe is actively steering
         if (!isTouchingForSteer)
         {
             targetSteer = Mathf.Clamp(targetSteer, -1f, 1f);
             steerVal = Mathf.MoveTowards(steerVal, targetSteer, steerSensitivity * Time.deltaTime);
         }
 
-        // 2. Pedaling from keyboard
-        // Left Shift = Left Pedal
-        if (pedalLeftAction == null && kb != null && kb.leftShiftKey.wasPressedThisFrame)
-        {
-            PerformPedalStrokeWithTiming(PedalSide.Left);
-        }
-
-        // Spacebar = Right Pedal (or Spacebar Mash + Timing Stroke)
-        if (pedalRightAction == null && kb != null && kb.spaceKey.wasPressedThisFrame)
+        // 2. Pedaling on Keyboard: Spacebar mash + Rhythm Timing
+        if (rhythmHitAction == null && kb != null && kb.spaceKey.wasPressedThisFrame)
         {
             HandleSpacebarPedalInput();
         }
 
-        // Stand and pedal (W hold)
-        bool standKey = false;
-        if (standPedalAction != null) standKey = standPedalAction.IsPressed();
-        else if (kb != null && kb.wKey.isPressed) standKey = true;
-        isStanding = standKey && !isExhausted && stamina > 0f;
+        // 3. Modifiers: W hold = Stand, S hold = Lean
+        bool wKey = false;
+        bool sKey = false;
+        if (standPedalAction != null) wKey = standPedalAction.IsPressed();
+        else if (kb != null) wKey = kb.wKey.isPressed;
+        if (kb != null) sKey = kb.sKey.isPressed;
+
+        isStanding = wKey && !isExhausted && stamina > 0f;
+        isLeaning = sKey && !wKey && !isExhausted;
     }
 
     /// <summary>
-    /// Triggered whenever Spacebar is pressed:
-    /// - Performs the pedal stroke.
-    /// - Checks anti-macro spam if single-key mashing.
-    /// - Evaluates marker timing for PERFECT / GOOD / MISS stroke.
+    /// Triggered on Spacebar press:
+    /// - Drives keyboard pedaling.
+    /// - Anti-cheese check: spamming faster than 0.12s halves cadence.
+    /// - Evaluates marker timing for PERFECT, GOOD, or MISS stroke.
     /// </summary>
     public void HandleSpacebarPedalInput()
     {
@@ -405,63 +415,82 @@ public class CyclingCadenceController : CycleController
         float interval = now - lastSpacePressTime;
         lastSpacePressTime = now;
 
-        if (allowSingleKeySpaceMash)
+        // Anti-cheese macro spam check on Spacebar
+        if (interval < 0.12f && interval > 0.001f)
         {
-            // Anti-cheat macro penalty: pressing faster than 0.12s
-            if (interval < 0.12f && interval > 0.001f)
-            {
-                TriggerAntiCheese("Spamming Spacebar too fast (<0.12s)! Cadence halved!");
-                return;
-            }
-
-            // Alternates pedal side automatically per Space press
-            PedalSide nextSide = (lastPedal == PedalSide.Left) ? PedalSide.Right : PedalSide.Left;
-            PerformPedalStrokeWithTiming(nextSide);
-        }
-        else
-        {
-            // Strict dual-key mode: Spacebar is Right Pedal
-            PerformPedalStrokeWithTiming(PedalSide.Right);
-        }
-    }
-
-    /// <summary>
-    /// Executes a pedal stroke and evaluates the Rhythm Marker:
-    /// - PERFECT: Speed burst (1.25x), +2.0 cadence, streak +1 (5 -> +5 Stamina).
-    /// - GOOD: Normal stroke (+1.6 cadence), streak resets.
-    /// - MISS: Weak stroke (+0.5 cadence), streak resets.
-    /// - If repeated same side: Anti-cheese penalty (halves cadence).
-    /// </summary>
-    public void PerformPedalStrokeWithTiming(PedalSide side)
-    {
-        if (side == PedalSide.None || raceFinished) return;
-
-        // Anti-Cheese Check
-        if (side == lastPedal)
-        {
-            TriggerAntiCheese($"Repeated {side} pedal twice in a row! Cadence halved!");
+            cadence *= antiCheeseMultiplier;
+            antiCheeseTriggered = true;
+            antiCheeseAlertTimer = 1.2f;
+            perfectStreak = 0;
+            lastTimingResult = TimingResult.Miss;
+            timingFeedbackTimer = 0.8f;
+            Debug.LogWarning("[Anti-Cheese] Spamming Spacebar too fast (<0.12s)! Cadence halved!");
             return;
         }
 
+        // Alternates pedal side internally for animator and cadence
+        PedalSide nextSide = (lastPedal == PedalSide.Left) ? PedalSide.Right : PedalSide.Left;
+        lastPedal = nextSide;
         pressedPedalThisFrame = true;
-        lastPedal = side;
         cadencePulseTimer = 0.25f;
 
-        // Timing Evaluation against Marker
+        // Evaluate Rhythm Timing
+        EvaluateRhythmMarkerTiming();
+    }
+
+    /// <summary>
+    /// Triggered when Android player clicks Left or Right Paddle button on screen:
+    /// - Clicking alternating Left -> Right adds +2.0 cadence.
+    /// - Clicking the same paddle button twice in a row halves cadence (anti-cheese).
+    /// </summary>
+    public void OnPedalInput(PedalSide side)
+    {
+        if (side == PedalSide.None || raceFinished) return;
+
+        pressedPedalThisFrame = true;
+        cadencePulseTimer = 0.25f;
+
+        // Anti-Cheese Rule: Clicking the same paddle twice in a row halves cadence
+        if (side == lastPedal)
+        {
+            cadence *= antiCheeseMultiplier;
+            antiCheeseTriggered = true;
+            antiCheeseAlertTimer = 1.2f;
+            perfectStreak = 0;
+            Debug.LogWarning($"[Anti-Cheese] Repeated {side} paddle twice in a row! Cadence halved to {cadence:F1}");
+            return;
+        }
+
+        // Valid alternating paddle press
+        lastPedal = side;
+        cadence = Mathf.Min(cadenceMax, cadence + cadenceStep);
+
+        // Also evaluate rhythm marker when paddle is clicked
+        EvaluateRhythmMarkerTiming();
+    }
+
+    /// <summary>
+    /// Evaluates the rhythm marker position:
+    /// - PERFECT (green zone): Speed burst (1.25x), streak +1, at 5 streaks -> +5 Stamina!
+    /// - GOOD (yellow zone): Normal stroke, streak resets.
+    /// - MISS (outside): Streak resets.
+    /// </summary>
+    public void EvaluateRhythmMarkerTiming()
+    {
         float distFromCenter = Mathf.Abs(rhythmMarkerPos - perfectZoneCenter);
 
         if (distFromCenter <= perfectZoneHalfWidth)
         {
-            // ⚡ PERFECT STROKE!
+            // PERFECT HIT!
             lastTimingResult = TimingResult.Perfect;
             timingFeedbackTimer = 1.0f;
             burstTimer = burstDuration; // Speed burst
 
-            cadence = Mathf.Min(cadenceMax, cadence + cadenceStep);
+            cadence = Mathf.Min(cadenceMax, cadence + 1.0f);
             perfectStreak++;
-            Debug.Log($"[Timing] PERFECT STROKE! Streak: {perfectStreak}/5");
+            Debug.Log($"[Timing] PERFECT! Streak: {perfectStreak}/5");
 
-            // 5 PERFECT STREAK -> +5 Stamina bonus!
+            // 5 PERFECT -> +5 Stamina bonus!
             if (perfectStreak >= 5)
             {
                 stamina = Mathf.Min(staminaMax, stamina + 5.0f);
@@ -471,40 +500,26 @@ public class CyclingCadenceController : CycleController
         }
         else if (distFromCenter <= goodZoneHalfWidth)
         {
-            // ✓ GOOD STROKE
+            // GOOD HIT
             lastTimingResult = TimingResult.Good;
             timingFeedbackTimer = 0.8f;
-            perfectStreak = 0; // Reset streak on non-perfect
-
-            cadence = Mathf.Min(cadenceMax, cadence + cadenceStep * 0.8f);
+            perfectStreak = 0; // Reset streak
         }
         else
         {
-            // ✗ MISS STROKE
+            // MISS
             lastTimingResult = TimingResult.Miss;
             timingFeedbackTimer = 0.8f;
-            perfectStreak = 0; // Reset streak on miss
-
-            cadence = Mathf.Min(cadenceMax, cadence + cadenceStep * 0.35f);
+            perfectStreak = 0; // Reset streak
         }
     }
 
-    private void TriggerAntiCheese(string message)
-    {
-        cadence *= antiCheeseMultiplier;
-        antiCheeseTriggered = true;
-        antiCheeseAlertTimer = 1.2f;
-        perfectStreak = 0;
-        lastTimingResult = TimingResult.Miss;
-        timingFeedbackTimer = 0.8f;
-        Debug.LogWarning($"[Anti-Cheese] {message} Cadence reduced to {cadence:F1}");
-    }
-
     /// <summary>
-    /// Android touch:
-    /// - Left Zone (bottom-left corner): Left Pedal
-    /// - Right Zone (bottom-right corner): Right Pedal
-    /// - Swiping (horizontal touch drag): Steering
+    /// Touch Input (Android):
+    /// - Left Zone / Button: Left Paddle
+    /// - Right Zone / Button: Right Paddle
+    /// - Center Zone / Button: Rhythm Hit (Space equivalent)
+    /// - Swiping (horizontal drag in upper area): Steering
     /// </summary>
     void ProcessAndroidTouchZonesAndSwipe()
     {
@@ -522,25 +537,27 @@ public class CyclingCadenceController : CycleController
             float nx = touch.screenPosition.x / Screen.width;
             float ny = touch.screenPosition.y / Screen.height;
 
-            bool isPedalZone = (ny <= 0.35f && (nx <= 0.40f || nx >= 0.60f));
+            bool isPedalZone = (ny <= 0.35f && (nx <= 0.38f || nx >= 0.62f));
+            bool isCenterRhythmZone = (ny <= 0.35f && nx > 0.38f && nx < 0.62f);
 
             if (isPedalZone)
             {
                 if (touch.phase == UnityEngine.InputSystem.TouchPhase.Began)
                 {
-                    if (nx <= 0.40f)
-                    {
-                        PerformPedalStrokeWithTiming(PedalSide.Left);
-                    }
-                    else if (nx >= 0.60f)
-                    {
-                        PerformPedalStrokeWithTiming(PedalSide.Right);
-                    }
+                    if (nx <= 0.38f) OnPedalInput(PedalSide.Left);
+                    else if (nx >= 0.62f) OnPedalInput(PedalSide.Right);
+                }
+            }
+            else if (isCenterRhythmZone)
+            {
+                if (touch.phase == UnityEngine.InputSystem.TouchPhase.Began)
+                {
+                    HandleSpacebarPedalInput();
                 }
             }
             else
             {
-                // Swipe to steer
+                // Swipe to steer in upper screen
                 if (touch.phase == UnityEngine.InputSystem.TouchPhase.Began)
                 {
                     steerTouchFingerId = touch.touchId;
@@ -571,22 +588,20 @@ public class CyclingCadenceController : CycleController
     }
 
     /// <summary>
-    /// Cadence Decay & Speed Conversion (§5.1):
-    /// - Continuous decay when not pedaling: cadence -= 3.0 * dt
-    /// - speedMult = 0.3 + 1.1 * (cadence / 8.0)
-    /// - currentSpeed = baseSpeed * speedMult (3.6 to 16.8 m/s)
-    /// - Stamina Gate:
-    ///   - stamina >= 50: 1.0
-    ///   - stamina >= 20: Lerp(0.7, 1.0)
-    ///   - stamina < 20: Lerp(0.0, 0.7)
-    /// - Exhaustion: speed locked to 30%
-    /// - PERFECT Burst: finalSpeed *= 1.25x
+    /// Specification 5.1 Speed Conversion & Stamina Gate:
+    /// speedMult = 0.3 + 1.1 * (cadence / 8.0)
+    /// currentSpeed = baseSpeed * speedMult (0 cadence -> 3.6 m/s; 8 cadence -> 16.8 m/s)
+    /// Piecewise stamina gate:
+    /// if stamina >= 50:        gate = 1.0
+    /// elif stamina >= 20:      gate = Mathf.Lerp(0.7f, 1.0f, (stamina - 20) / 30f)
+    /// else:                    gate = Mathf.Lerp(0.0f, 0.7f, stamina / 20f)
+    /// finalSpeed = currentSpeed * gate
     /// </summary>
     void UpdateCadenceAndSpeed()
     {
         float dt = Time.deltaTime;
 
-        // Continuous cadence decay if no pedal press this frame
+        // Continuous cadence decay toward 0 if no pedal pressed this frame
         if (!pressedPedalThisFrame)
         {
             cadence = Mathf.Max(0.0f, cadence - cadenceDecay * dt);
@@ -617,6 +632,10 @@ public class CyclingCadenceController : CycleController
 
         finalSpeed = currentSpeed * gate;
 
+        // Posture modifiers
+        if (isStanding) finalSpeed *= standSpeedMultiplier;
+        else if (isLeaning) finalSpeed *= leanSpeedMultiplier;
+
         // Apply PERFECT timing speed burst if active
         if (burstTimer > 0f)
         {
@@ -626,10 +645,10 @@ public class CyclingCadenceController : CycleController
     }
 
     /// <summary>
-    /// Stamina Drain & Regen (§5.4):
-    /// - Drain (Mashing): stamina -= (1.5 + 2.0 * cadence / cadenceMax) * dt
-    /// - Passive Regen (Coasting): if cadence < 1.0 -> stamina += 0.5 * dt
-    /// - Exhaustion: at stamina <= 0 -> locked to 30% speed + stamina += 1.0 * dt until 20.
+    /// Specification 5.1 Stamina:
+    /// default drain = 1.5 + 2.0 * (cadence / 8.0) per second (higher cadence = faster drain)
+    /// passive regen: no pedal input (cadence < 1.0) -> +0.5/sec
+    /// Exhaustion Recovery: at stamina <= 0 -> 30% speed + +1/sec until 20
     /// </summary>
     void UpdateStaminaLogic()
     {
@@ -637,12 +656,12 @@ public class CyclingCadenceController : CycleController
 
         if (isExhausted)
         {
-            // Recovery: +1.0/s until 20
+            // Exhaustion recovery: +1.0/sec until 20
             stamina = Mathf.Min(staminaMax, stamina + exhaustionRegenRate * dt);
             if (stamina >= 20.0f)
             {
                 isExhausted = false;
-                Debug.Log("[Stamina] Cyclist recovered from exhaustion (Stamina >= 20).");
+                Debug.Log("[Stamina] Cyclist recovered from exhaustion (Stamina >= 20). Full control restored!");
             }
         }
         else
@@ -651,24 +670,24 @@ public class CyclingCadenceController : CycleController
             {
                 // Mashing drain
                 float drainRate = 1.5f + 2.0f * (cadence / cadenceMax);
-                if (isStanding) drainRate *= 1.3f;
+                if (isStanding) drainRate *= 1.25f;
                 stamina = Mathf.Max(0f, stamina - drainRate * dt);
 
                 if (stamina <= 0f)
                 {
                     isExhausted = true;
                     isStanding = false;
-                    Debug.LogWarning("[Stamina] Cyclist exhausted! Speed locked to 30% until stamina recovers to 20.");
+                    Debug.LogWarning("[Stamina] Cyclist exhausted (Stamina <= 0)! Speed locked to 30% until stamina recovers to 20.");
                 }
             }
             else
             {
-                // Coasting passive regen
+                // Passive regen: no pedal input -> +0.5/sec
                 stamina = Mathf.Min(staminaMax, stamina + passiveStaminaRegen * dt);
             }
         }
 
-        // Cross-scene state sync
+        // Sync cross-scene state with GameManager
         if (GameManager.I != null)
         {
             GameManager.I.stamina = stamina;
@@ -703,6 +722,10 @@ public class CyclingCadenceController : CycleController
             float bob = Mathf.Sin(Time.time * (cadence * 1.5f)) * 0.015f;
             targetOffset += Vector3.right * bob;
         }
+        else if (isLeaning)
+        {
+            targetOffset += Vector3.down * 0.04f + Vector3.forward * 0.08f;
+        }
 
         Vector3 targetPos = initialHipLocalPos + targetOffset;
         riderHips.localPosition = Vector3.Lerp(riderHips.localPosition, targetPos, 6.0f * Time.deltaTime);
@@ -720,18 +743,25 @@ public class CyclingCadenceController : CycleController
     }
 
     /// <summary>
-    /// Finishes race and transitions to "Swim_Scene".
+    /// When player finishes the cycling stage:
+    /// - Calculates stage time, total score, per-stage breakdown, total time
+    /// - Stores them properly into GameManager
+    /// - Transitions to "UIScene" in the Scenes folder!
     /// </summary>
     public override void TriggerFinish()
     {
         if (raceFinished) return;
         raceFinished = true;
 
-        Debug.Log("[CyclingCadenceController] Race Finished! Transitioning to 'Swim_Scene'...");
+        Debug.Log($"[CyclingCadenceController] Race Finished! Distance: {distanceTraveled:F1}m, Time: {elapsedStageTime:F2}s. Transitioning to '{nextSceneName}'...");
 
         if (rbComponent != null)
         {
+#if UNITY_6000_0_OR_NEWER
             rbComponent.linearVelocity = Vector3.zero;
+#else
+            rbComponent.velocity = Vector3.zero;
+#endif
             rbComponent.isKinematic = true;
         }
         if (bicycleVehicle != null)
@@ -741,36 +771,64 @@ public class CyclingCadenceController : CycleController
             bicycleVehicle.braking = true;
         }
 
+        // Calculate and save proper stage breakdown, total time, and total score in GameManager
         if (GameManager.I != null)
         {
+            // 1. Cycle Stage Time
+            GameManager.I.cycleTime = elapsedStageTime;
+
+            // Ensure other stages have valid recorded times (for standalone testing fallback)
+            if (GameManager.I.swimTime <= 0f) GameManager.I.swimTime = 48.32f;
+            if (GameManager.I.runTime <= 0f) GameManager.I.runTime = 112.07f;
+
+            // 2. Total Time = Swim + Cycle + Run
+            GameManager.I.totalTime = GameManager.I.swimTime + GameManager.I.cycleTime + GameManager.I.runTime;
+
+            // 3. Stage Score: distance (1000 pts) + remaining stamina bonus + time bonus
+            float timeBonus = Mathf.Max(0f, (150f - elapsedStageTime) * 10f);
+            float staminaBonus = stamina * 10f;
+            float stageScore = targetDistance + staminaBonus + timeBonus;
+            GameManager.I.totalScore += stageScore;
+
+            // 4. Carry over final stamina
             GameManager.I.stamina = stamina;
-            GameManager.I.perfectStreak = 0;
+            GameManager.I.perfectStreak = 0; // Streak resets on transition (§5.2)
+
+            Debug.Log($"[GameManager] Updated Breakdown -> Swim: {GameManager.I.swimTime:F2}s, Cycle: {GameManager.I.cycleTime:F2}s, Run: {GameManager.I.runTime:F2}s, TotalTime: {GameManager.I.totalTime:F2}s, TotalScore: {GameManager.I.totalScore:F0}");
         }
 
+        // Begin transition to UIScene
         if (TransitionManager.Instance != null)
         {
             TransitionManager.Instance.BeginTransition(
-                nextScene: "Swim_Scene",
+                nextScene: nextSceneName,
                 onComplete: () => {
-                    SceneManager.LoadScene("Swim_Scene");
+                    if (GameManager.I != null)
+                        GameManager.I.LoadScene(nextSceneName);
+                    else
+                        SceneManager.LoadScene(nextSceneName);
                 }
             );
         }
         else
         {
-            StartCoroutine(DirectLoadSwimSceneRoutine());
+            StartCoroutine(DirectLoadUISceneRoutine());
         }
     }
 
-    private IEnumerator DirectLoadSwimSceneRoutine()
+    private IEnumerator DirectLoadUISceneRoutine()
     {
         yield return new WaitForSeconds(1.0f);
-        SceneManager.LoadScene("Swim_Scene");
+        if (GameManager.I != null)
+            GameManager.I.LoadScene(nextSceneName);
+        else
+            SceneManager.LoadScene(nextSceneName);
     }
 
     // ==========================================
-    // UNIFIED HUD IMPLEMENTATION (Single OnGUI HUD)
-    // Distance, Speed, Cadence, Stamina, Streak, Rhythm Marker Bar
+    // 5.3 HUD IMPLEMENTATION
+    // Distance, Stamina bar (shared, labeled "Stamina"), speed readout,
+    // rhythm bar, cadence indicator, streak counter.
     // ==========================================
     void OnGUI()
     {
@@ -792,14 +850,15 @@ public class CyclingCadenceController : CycleController
 
         GUILayout.Space(3);
 
-        // 2. Speed Readout
+        // 2. Speed Readout & Modifiers
         float speedKmh = finalSpeed * 3.6f;
-        string burstTag = (burstTimer > 0f) ? " <color=cyan>[⚡ SPEED BURST!]</color>" : "";
-        GUILayout.Label($"<b>Speed:</b> {speedKmh:F1} km/h <size=11>({finalSpeed:F1} m/s)</size>{burstTag}");
+        string burstTag = (burstTimer > 0f) ? " <color=cyan>[SPEED BURST!]</color>" : "";
+        string standTag = isStanding ? " <color=yellow>[STAND]</color>" : (isLeaning ? " <color=cyan>[AERO LEAN]</color>" : "");
+        GUILayout.Label($"<b>Speed:</b> {speedKmh:F1} km/h <size=11>({finalSpeed:F1} m/s)</size>{burstTag}{standTag}");
 
         GUILayout.Space(2);
 
-        // 3. Cadence Meter
+        // 3. Cadence Meter (filling bar 0 to 8)
         float cad01 = Mathf.Clamp01(cadence / cadenceMax);
         Color cadColor = Color.Lerp(new Color(0.25f, 0.8f, 0.25f), new Color(1.0f, 0.55f, 0.0f), cad01);
         if (cadencePulseTimer > 0f) cadColor = Color.white;
@@ -808,7 +867,7 @@ public class CyclingCadenceController : CycleController
 
         GUILayout.Space(3);
 
-        // 4. Shared Stamina Bar
+        // 4. Shared Stamina Bar (labeled "Stamina")
         float stam01 = stamina / staminaMax;
         Color stamCol = isExhausted ? Color.red : (stam01 >= 0.5f ? new Color(0.1f, 0.85f, 0.2f) : (stam01 >= 0.2f ? Color.yellow : new Color(1.0f, 0.35f, 0.1f)));
         string statusStr = isExhausted ? " <color=red>[EXHAUSTION - 30% SPEED]</color>" : (cadence < 1.0f ? " <color=cyan>[Coasting +0.5/s]</color>" : "");
@@ -817,9 +876,9 @@ public class CyclingCadenceController : CycleController
 
         GUILayout.Space(3);
 
-        // 5. Streak Counter
-        string stars = new string('★', perfectStreak) + new string('☆', 5 - perfectStreak);
-        GUILayout.Label($"<b>Streak:</b> {perfectStreak}/5 <color=yellow>{stars}</color> <size=11>(5 PERFECT -> +5 Stamina)</size>");
+        // 5. Streak Counter (§5.2: 5 PERFECT -> +5 Stamina)
+        string stars = new string('*', perfectStreak) + new string('-', 5 - perfectStreak);
+        GUILayout.Label($"<b>Streak:</b> {perfectStreak}/5 <color=yellow>[{stars}]</color> <size=11>(5 PERFECT -> +5 Stamina)</size>");
 
         GUILayout.Space(2);
 
@@ -831,19 +890,19 @@ public class CyclingCadenceController : CycleController
         if (lastTimingResult == TimingResult.Perfect)
         {
             GUI.color = Color.green;
-            GUILayout.Label("⚡ <b>PERFECT STROKE! Speed Burst Active!</b>");
+            GUILayout.Label("<b>PERFECT! Speed Burst Active!</b>");
             GUI.color = Color.white;
         }
         else if (lastTimingResult == TimingResult.Good)
         {
             GUI.color = Color.yellow;
-            GUILayout.Label("✓ <b>GOOD STROKE!</b>");
+            GUILayout.Label("<b>GOOD!</b>");
             GUI.color = Color.white;
         }
         else if (lastTimingResult == TimingResult.Miss)
         {
             GUI.color = Color.red;
-            GUILayout.Label("✗ <b>MISS! (Wait for Green Zone)</b>");
+            GUILayout.Label("<b>MISS! (Wait for Green Zone)</b>");
             GUI.color = Color.white;
         }
 
@@ -851,17 +910,18 @@ public class CyclingCadenceController : CycleController
         if (antiCheeseTriggered)
         {
             GUI.color = Color.red;
-            GUILayout.Label("⚠️ <b>ANTI-CHEESE: Same input repeated! Cadence halved!</b>");
+            GUILayout.Label("<b>ANTI-CHEESE: Same paddle repeated! Cadence halved!</b>");
             GUI.color = Color.white;
         }
 
         // 9. Steering Indicator
-        string steerStr = steerVal < -0.1f ? "◄ STEERING LEFT" : (steerVal > 0.1f ? "STEERING RIGHT ►" : "▲ STRAIGHT");
-        GUILayout.Label($"<size=11>Steer: {steerStr} (A/D or Swipe)</size>");
+        string steerStr = steerVal < -0.1f ? "STEERING LEFT <--" : (steerVal > 0.1f ? "STEERING RIGHT -->" : "STRAIGHT");
+        GUILayout.Label($"<size=11>Steer: {steerStr} (A / D or Swipe)</size>");
 
         GUILayout.EndArea();
 
-        // On-Screen Touch Controls (Android / Mobile Testing)
+        // 10. On-Screen Touch Controls (Android)
+        // Only Left/Right Pedals and Center Rhythm Hit (Stand & Lean buttons removed per user request)
         if (showTouchButtons)
         {
             DrawAndroidTouchButtons();
@@ -919,7 +979,7 @@ public class CyclingCadenceController : CycleController
         GUI.color = (lastPedal == PedalSide.Left) ? new Color(0.6f, 0.6f, 0.6f, 0.95f) : Color.white;
         if (GUI.Button(leftZoneRect, "<size=15><b>[ LEFT ]\nPEDAL</b></size>"))
         {
-            PerformPedalStrokeWithTiming(PedalSide.Left);
+            OnPedalInput(PedalSide.Left);
         }
 
         // Bottom Right Zone: [ RIGHT PEDAL ]
@@ -927,14 +987,14 @@ public class CyclingCadenceController : CycleController
         GUI.color = (lastPedal == PedalSide.Right) ? new Color(0.6f, 0.6f, 0.6f, 0.95f) : Color.white;
         if (GUI.Button(rightZoneRect, "<size=15><b>[ RIGHT ]\nPEDAL</b></size>"))
         {
-            PerformPedalStrokeWithTiming(PedalSide.Right);
+            OnPedalInput(PedalSide.Right);
         }
 
-        // Bottom Center: [ SPACE / PEDAL ] (Hit on Green!)
+        // Bottom Center: [ SPACE / HIT ] (Hit on Green!)
         int centerW = 160;
         Rect centerBtnRect = new Rect((Screen.width - centerW) / 2, Screen.height - btnH - margin, centerW, btnH);
         GUI.color = new Color(0.2f, 0.9f, 0.4f, 0.95f);
-        if (GUI.Button(centerBtnRect, "<size=14><b>[ SPACE / PEDAL ]\nHIT ON GREEN!</b></size>"))
+        if (GUI.Button(centerBtnRect, "<size=13><b>[ SPACE / HIT ]\nRHYTHM HIT\n(ON GREEN)</b></size>"))
         {
             HandleSpacebarPedalInput();
         }

@@ -90,12 +90,12 @@ public class CycleController : MonoBehaviour
         if (TransitionManager.Instance != null)
         {
             TransitionManager.Instance.BeginTransition(
-                nextScene: "Swim_Scene",
+                nextScene: "UIScene",
                 onComplete: () => {
                     if (GameManager.I != null)
-                        GameManager.I.LoadScene("Swim_Scene");
+                        GameManager.I.LoadScene("UIScene");
                     else
-                        UnityEngine.SceneManagement.SceneManager.LoadScene("Swim_Scene");
+                        UnityEngine.SceneManagement.SceneManager.LoadScene("UIScene");
                 }
             );
         }
