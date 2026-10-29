@@ -542,13 +542,28 @@ public class SwimTransitionManager : MonoBehaviour
         float bannerHeight = 56f;
         float x = (Screen.width - bannerWidth) * 0.5f;
         float y = Screen.height - 110f;
+        Rect rect = new Rect(x, y, bannerWidth, bannerHeight);
+
+        // Mobile touch tap on the prompt banner triggers the transition
+        if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
+        {
+            if (canEnterSwim)
+            {
+                SwitchToSwim();
+                return;
+            }
+            else if (canExitSwim)
+            {
+                SwitchToRun();
+                return;
+            }
+        }
 
         // Background box
         Color prevBg = GUI.backgroundColor;
         Color prevContent = GUI.contentColor;
 
         GUI.backgroundColor = new Color(0.08f, 0.08f, 0.12f, 0.88f);
-        Rect rect = new Rect(x, y, bannerWidth, bannerHeight);
         GUI.Box(rect, GUIContent.none);
 
         // Icon indicator "[ E ]"

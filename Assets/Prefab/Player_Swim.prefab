@@ -2589,7 +2589,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &5441324752955018064
 Transform:
   m_ObjectHideFlags: 0
@@ -2642,16 +2642,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8c6a51d9e23f4b8da10b45781a93e412, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SwimmerController
-  baseSwimSpeed: 4.5
-  sprintSwimSpeed: 7
-  autoMoveForward: 1
+  goodStrokeSpeed: 5.2
+  perfectStrokeSpeed: 8
+  perfectSpeedBurstMultiplier: 1.25
+  missStrokeSpeed: 1.8
+  minGlideSpeed: 1.2
+  glideDeceleration: 2.4
+  strokeImpulseDuration: 0.65
   lateralSpeed: 5
   rotationSmoothing: 8
+  rhythmSpeed: 1.25
+  perfectZoneCenter: 0.5
+  perfectZoneHalfWidth: 0.08
+  goodZoneHalfWidth: 0.2
+  maxOxygen: 100
+  activeDrainRate: 2
+  glideDrainRate: 1
+  passiveRegenRate: 0.5
+  exhaustionRegenRate: 1
+  exhaustionRecoverThreshold: 20
+  exhaustionSpeedMultiplier: 0.3
+  streakGoal: 5
+  streakOxygenReward: 5
+  targetDistance: 225
+  nextScene: Cycle_Scene
   clampToCanal: 1
   minCanalX: 153
   maxCanalX: 169.5
+  minCanalZ: 246
+  maxCanalZ: 472
   waterSurfaceY: 12.6
-  surfaceOffset: -0.35
+  surfaceOffset: -2.45
   bodyPitch: 0
   bodyRoll: 0
   enableWaterBobbing: 1
@@ -2662,11 +2683,12 @@ MonoBehaviour:
   swimStateName: Swimming
   speedParam: Speed
   isSwimmingParam: isSwimming
-  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   autoFollowCamera: 1
   cameraOffset: {x: 0, y: 3.2, z: 6.5}
   cameraFollowSpeed: 10
   cameraRotationSpeed: 8
+  showHUD: 1
+  showTouchControls: 1
 --- !u!1 &8774229616648054595
 GameObject:
   m_ObjectHideFlags: 0
