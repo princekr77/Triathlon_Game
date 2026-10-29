@@ -169,25 +169,22 @@ public class SwimTransitionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Switches character from Player_Swim to Player_RunSwim at the Finish Line and immediately transitions to Cycle_Scene.
+    /// Switches character from Player_Swim to Player_RunSwim at the Run Exit Spawn Position.
     /// </summary>
     public void SwitchToRun()
     {
+        Debug.Log($"[SwimTransitionManager] 'E' pressed: Exiting swim mode. Activating Player_RunSwim at Run Exit Spawn Position: {runExitSpawnPosition}");
         canExitSwim = false;
         ClearPrompt();
 
-        // 1. Determine spawn position at Finish Line
-        Vector3 targetSpawnPos = (finishLineTrigger != null) ? finishLineTrigger.bounds.center : runExitSpawnPosition;
-        Debug.Log($"[SwimTransitionManager] Spawning Player_RunSwim directly at Finish Line: {targetSpawnPos}");
-
-        // 2. Activate Player_RunSwim at the Finish Line
+        // 1. Activate Player_RunSwim at Run Exit Spawn Position
         if (playerRunSwim != null)
         {
             // Disable CharacterController temporarily so transform repositioning is respected
             var cc = playerRunSwim.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
 
-            playerRunSwim.transform.position = targetSpawnPos;
+            playerRunSwim.transform.position = runExitSpawnPosition;
             playerRunSwim.transform.rotation = Quaternion.Euler(runExitSpawnEuler);
 
             if (cc != null) cc.enabled = true;
@@ -195,20 +192,29 @@ public class SwimTransitionManager : MonoBehaviour
             playerRunSwim.SetActive(true);
         }
 
-        // 3. Deactivate Player_Swim
+        // 2. Deactivate Player_Swim
         if (playerSwim != null)
         {
             playerSwim.SetActive(false);
         }
 
-        // 4. Update Camera Follow Target
+        // 3. Update Camera Follow Target
         if (SwimCameraFollow.Instance != null && playerRunSwim != null)
         {
             SwimCameraFollow.Instance.SetTarget(playerRunSwim.transform, true);
         }
+    }
 
-        // 5. Directly transition to Cycle_Scene
-        TriggerFinishLine();
+    /// <summary>
+    /// Displays the exit swim prompt ("Click E to exit swim") and enables pressing 'E' to exit.
+    /// </summary>
+    public void PromptExitSwim()
+    {
+        if (!canExitSwim)
+        {
+            canExitSwim = true;
+            SetPrompt(exitSwimPrompt);
+        }
     }
 
     /// <summary>
@@ -261,8 +267,8 @@ public class SwimTransitionManager : MonoBehaviour
             case SwimTriggerZone.ZoneKind.ExitSwim:
                 if (IsSwimPlayer(other))
                 {
-                    Debug.Log("[SwimTransitionManager] Swim player collided with RunPlayer_Spawn! Directly spawning runner at finish line and switching scene...");
-                    SwitchToRun();
+                    canExitSwim = true;
+                    SetPrompt(exitSwimPrompt);
                 }
                 break;
 
@@ -349,10 +355,15 @@ public class SwimTransitionManager : MonoBehaviour
                 bool inZone = runPlayerSpawnTrigger.bounds.Contains(swimPos)
                            || Vector3.Distance(swimPos, runPlayerSpawnTrigger.bounds.center) < ExitSwimRadius;
 
-                if (inZone)
+                if (inZone && !canExitSwim)
                 {
-                    Debug.Log("[SwimTransitionManager] Swim player in proximity to RunPlayer_Spawn! Directly spawning runner at finish line.");
-                    SwitchToRun();
+                    canExitSwim = true;
+                    SetPrompt(exitSwimPrompt);
+                }
+                else if (!inZone && canExitSwim)
+                {
+                    canExitSwim = false;
+                    if (currentPrompt == exitSwimPrompt) ClearPrompt();
                 }
             }
         }
@@ -550,11 +561,18 @@ public class SwimTransitionManager : MonoBehaviour
     {
         if (!enableOnGUIPrompt || string.IsNullOrEmpty(currentPrompt)) return;
 
+        float screenW = Screen.width;
+        float screenH = Screen.height;
+        float scaleW = screenW / 1100f;
+        float scaleH = screenH / 650f;
+        float uiScale = Mathf.Clamp(Mathf.Min(scaleW, scaleH), 0.55f, 1.45f);
+
         // Responsive centered prompt pill
-        float bannerWidth = Mathf.Clamp(Screen.width * 0.45f, 320f, 600f);
-        float bannerHeight = Mathf.Clamp(Screen.height * 0.08f, 54f, 80f);
-        float x = (Screen.width - bannerWidth) * 0.5f;
-        float y = Screen.height - bannerHeight - Mathf.Clamp(Screen.height * 0.06f, 30f, 70f);
+        float bannerWidth = Mathf.Clamp(screenW * 0.45f, 260f, 560f);
+        float bannerHeight = Mathf.Clamp(52f * uiScale, 34f, 74f);
+        float x = (screenW - bannerWidth) * 0.5f;
+        float bottomMargin = Mathf.Clamp(25f * uiScale, 10f, 60f);
+        float y = screenH - bannerHeight - bottomMargin;
         Rect rect = new Rect(x, y, bannerWidth, bannerHeight);
 
         // Mobile touch tap on the prompt banner triggers the transition
@@ -579,29 +597,29 @@ public class SwimTransitionManager : MonoBehaviour
         GUI.backgroundColor = new Color(0.08f, 0.08f, 0.12f, 0.88f);
         GUI.Box(rect, GUIContent.none);
 
-        float keyW = Mathf.Clamp(bannerHeight * 0.72f, 36f, 52f);
+        float keyW = Mathf.Clamp(bannerHeight * 0.72f, 26f, 50f);
         float keyH = keyW;
         float keyY = y + (bannerHeight - keyH) * 0.5f;
 
         // Icon indicator "[ E ]"
         GUIStyle keyStyle = new GUIStyle(GUI.skin.box)
         {
-            fontSize = Mathf.RoundToInt(keyH * 0.5f),
+            fontSize = Mathf.Clamp(Mathf.RoundToInt(keyH * 0.5f), 10, 22),
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleCenter
         };
         keyStyle.normal.textColor = new Color(0.98f, 0.84f, 0.15f); // Gold highlight
-        GUI.Box(new Rect(x + 12f, keyY, keyW, keyH), "E", keyStyle);
+        GUI.Box(new Rect(x + 10f, keyY, keyW, keyH), "E", keyStyle);
 
         // Text prompt
         GUIStyle textStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = Mathf.RoundToInt(bannerHeight * 0.35f),
+            fontSize = Mathf.Clamp(Mathf.RoundToInt(bannerHeight * 0.35f), 10, 22),
             fontStyle = FontStyle.Bold,
             alignment = TextAnchor.MiddleLeft
         };
         textStyle.normal.textColor = Color.white;
-        GUI.Label(new Rect(x + keyW + 24f, y, bannerWidth - keyW - 32f, bannerHeight), currentPrompt, textStyle);
+        GUI.Label(new Rect(x + keyW + 18f, y, bannerWidth - keyW - 24f, bannerHeight), currentPrompt, textStyle);
 
         GUI.backgroundColor = prevBg;
         GUI.contentColor = prevContent;
