@@ -13,6 +13,12 @@ public class GameManager : MonoBehaviour
     public int perfectStreak = 0;
     public bool recovering = false;
 
+    // Stage breakdown times & AI benchmark
+    public float swimTime = 0f;
+    public float cycleTime = 0f;
+    public float runTime = 0f;
+    public float aiTime = 281.20f;
+
     // ---- Stage config (tune later) ----
     public const float CycleDistance = 1000f;
 
@@ -32,6 +38,10 @@ public class GameManager : MonoBehaviour
         coinsCollected = 0;
         perfectStreak = 0;
         recovering = false;
+        swimTime = 0f;
+        cycleTime = 0f;
+        runTime = 0f;
+        aiTime = 281.20f;
     }
 
     public void LoadScene(string sceneName)

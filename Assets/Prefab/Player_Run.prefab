@@ -2582,6 +2582,9 @@ GameObject:
   m_Component:
   - component: {fileID: 5441324752955018064}
   - component: {fileID: 2757063978594661432}
+  - component: {fileID: 7435298509551453458}
+  - component: {fileID: 6827214246160355060}
+  - component: {fileID: 6271465489606672772}
   m_Layer: 0
   m_Name: Player_Run
   m_TagString: Player
@@ -2629,6 +2632,103 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!143 &7435298509551453458
+CharacterController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8618697516994093549}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Height: 1.8
+  m_Radius: 0.35
+  m_SlopeLimit: 45
+  m_StepOffset: 0.3
+  m_SkinWidth: 0.08
+  m_MinMoveDistance: 0
+  m_Center: {x: 0, y: 0.9, z: 0}
+--- !u!114 &6827214246160355060
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8618697516994093549}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8de299fe65a141a4a7267dbea3e3e764, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RunnerController
+  runSpeed: 10
+  speedRampRate: 0.05
+  maxRunSpeed: 16
+  useTransformForward: 1
+  customForwardDirection: {x: 0, y: 0, z: 1}
+  movementMode: 0
+  lateralSpeed: 9
+  clampLateralMovement: 0
+  minLateralX: -3.5
+  maxLateralX: 3.5
+  laneDistance: 2.5
+  maxLaneIndex: 2
+  laneChangeSpeed: 12
+  jumpHeight: 1.8
+  gravity: 24
+  fallMultiplier: 1.2
+  groundedStickForce: -2
+  runDistance: 500
+  nextSceneName: Swim_Scene
+  animator: {fileID: 2757063978594661432}
+  isRunningParam: isRunning
+  isGroundedParam: isGrounded
+  jumpTriggerParam: Jump
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  showHUD: 1
+  enableTouchControls: 1
+  swipeThresholdPixels: 40
+  touchDragSensitivity: 1.5
+  enableCountdown: 1
+  countdownDuration: 3
+  preCountdownDelay: 0.3
+  countdownTMP: {fileID: 0}
+  countdownLegacyText: {fileID: 0}
+--- !u!54 &6271465489606672772
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8618697516994093549}
+  serializedVersion: 5
+  m_Mass: 10
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &8774229616648054595
 GameObject:
   m_ObjectHideFlags: 0
