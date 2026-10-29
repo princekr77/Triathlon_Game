@@ -120,6 +120,27 @@ public class RunnerController : MonoBehaviour
     [Tooltip("Sensitivity of touch drag in Continuous mode.")]
     public float touchDragSensitivity = 1.5f;
 
+    [Header("Race Start Countdown")]
+    [Tooltip("Enable 3, 2, 1, GO countdown before runner begins moving.")]
+    public bool enableCountdown = true;
+
+    [Tooltip("Total countdown duration in seconds (e.g. 3.0 for 3, 2, 1).")]
+    public float countdownDuration = 3.0f;
+
+    [Tooltip("Brief delay before countdown begins (seconds).")]
+    public float preCountdownDelay = 0.3f;
+
+    [Tooltip("Optional external TextMeshPro UI component for countdown text.")]
+    public TMPro.TextMeshProUGUI countdownTMP;
+
+    [Tooltip("Optional external legacy Text UI component for countdown text.")]
+    public UnityEngine.UI.Text countdownLegacyText;
+
+    // Countdown internal state
+    private bool isCountingDown = false;
+    private string countdownDisplay = "";
+    private float countdownScaleTimer = 0.0f;
+
     // Runtime state
     private CharacterController characterController;
     private float currentSpeed;
@@ -216,6 +237,11 @@ public class RunnerController : MonoBehaviour
 
         DisableRoadStripeColliders();
         SetupInputActions();
+
+        if (enableCountdown)
+        {
+            isRunningActive = false;
+        }
     }
 
     /// <summary>
@@ -288,16 +314,98 @@ public class RunnerController : MonoBehaviour
 
     private void Start()
     {
-        // Immediately start running animation
+        if (enableCountdown)
+        {
+            StartCoroutine(CountdownRoutine());
+        }
+        else
+        {
+            isRunningActive = true;
+            if (animator != null)
+            {
+                animator.SetBool(isRunningHash, true);
+                animator.SetBool(isGroundedHash, true);
+            }
+        }
+    }
+
+    private IEnumerator CountdownRoutine()
+    {
+        isCountingDown = true;
+        isRunningActive = false;
+
+        // Player stands in ready / idle position during countdown
+        if (animator != null)
+        {
+            animator.SetBool(isRunningHash, false);
+            animator.SetBool(isGroundedHash, true);
+        }
+
+        if (preCountdownDelay > 0f)
+            yield return new WaitForSeconds(preCountdownDelay);
+
+        float timer = countdownDuration;
+        int lastSecond = -1;
+
+        while (timer > 0f)
+        {
+            int currentSecond = Mathf.CeilToInt(timer);
+            if (currentSecond != lastSecond)
+            {
+                lastSecond = currentSecond;
+                countdownDisplay = currentSecond.ToString();
+                countdownScaleTimer = 1.0f;
+                UpdateExternalCountdown(countdownDisplay);
+            }
+
+            timer -= Time.deltaTime;
+            countdownScaleTimer = Mathf.Max(0f, countdownScaleTimer - Time.deltaTime * 2.5f);
+            yield return null;
+        }
+
+        // Countdown complete: GO!
+        countdownDisplay = "GO!";
+        countdownScaleTimer = 1.0f;
+        UpdateExternalCountdown("GO!");
+
+        // Start runner movement
+        isCountingDown = false;
+        isRunningActive = true;
+        lastPosition = transform.position;
+
         if (animator != null)
         {
             animator.SetBool(isRunningHash, true);
             animator.SetBool(isGroundedHash, true);
         }
+
+        // Display "GO!" for 0.75 seconds then clear
+        yield return new WaitForSeconds(0.75f);
+        countdownDisplay = "";
+        UpdateExternalCountdown("");
+    }
+
+    private void UpdateExternalCountdown(string text)
+    {
+        if (countdownTMP != null) countdownTMP.text = text;
+        if (countdownLegacyText != null) countdownLegacyText.text = text;
     }
 
     private void Update()
     {
+        // Ground character in idle while countdown is running
+        if (isCountingDown)
+        {
+            CheckGrounded();
+            characterController.Move(new Vector3(0, groundedStickForce, 0) * Time.deltaTime);
+            if (animator != null)
+            {
+                animator.SetBool(isRunningHash, false);
+                animator.SetBool(isGroundedHash, true);
+            }
+            return;
+        }
+
         if (stageCompleted || !isRunningActive)
         {
             if (animator != null)
@@ -816,6 +924,60 @@ public class RunnerController : MonoBehaviour
         };
         speedStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.85f);
         GUI.Label(new Rect(30, 82, 300, 30), $"Speed: {currentSpeed:F1} m/s", speedStyle);
+
+        // Race Countdown Display (3, 2, 1, GO!)
+        if (isCountingDown || !string.IsNullOrEmpty(countdownDisplay))
+        {
+            float centerW = Mathf.Clamp(screenW * 0.45f, 280, 440);
+            float centerH = Mathf.Clamp(screenH * 0.28f, 160, 240);
+            Rect bgRect = new Rect((screenW - centerW) * 0.5f, (screenH - centerH) * 0.38f, centerW, centerH);
+
+            Color savedColor = GUI.color;
+
+            // Semi-transparent sci-fi backdrop
+            GUI.color = new Color(0.02f, 0.06f, 0.14f, 0.82f);
+            GUI.DrawTexture(bgRect, Texture2D.whiteTexture);
+
+            // Subtitle banner ("GET READY!" / "RACE STARTED!")
+            GUIStyle subStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.Clamp(Screen.height / 34, 14, 22),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+            subStyle.normal.textColor = isCountingDown 
+                ? new Color(0f, 0.85f, 1f, 0.95f) 
+                : new Color(0.2f, 1f, 0.45f, 0.95f);
+
+            GUI.color = Color.white;
+            string subText = isCountingDown ? "GET READY!" : "RACE STARTED!";
+            GUI.Label(new Rect(bgRect.x, bgRect.y + 12, centerW, 30), subText, subStyle);
+
+            // Big Countdown Number with punch scaling
+            int baseSize = Mathf.Clamp(Screen.height / 8, 64, 110);
+            int punchSize = Mathf.RoundToInt(baseSize * (1f + 0.22f * countdownScaleTimer));
+
+            GUIStyle numStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = punchSize,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+
+            Color numColor = countdownDisplay == "GO!" 
+                ? new Color(0.2f, 1f, 0.45f, 1f) 
+                : new Color(1f, 0.85f, 0.15f, 1f);
+
+            // Shadow
+            numStyle.normal.textColor = new Color(0f, 0f, 0f, 0.8f);
+            GUI.Label(new Rect(bgRect.x + 4, bgRect.y + 40, centerW, centerH - 45), countdownDisplay, numStyle);
+
+            // Foreground number
+            numStyle.normal.textColor = numColor;
+            GUI.Label(new Rect(bgRect.x, bgRect.y + 36, centerW, centerH - 45), countdownDisplay, numStyle);
+
+            GUI.color = savedColor;
+        }
 
         // Stage Complete Message
         if (stageCompleted)
