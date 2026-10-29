@@ -5,6 +5,10 @@ using TMPro;
 
 public class MainMenuController : MonoBehaviour
 {
+    [Header("Panels Navigation")]
+    [Tooltip("Reference to the ResultPanel GameObject.")]
+    public GameObject resultPanel;
+
     [Header("UI References")]
     [Tooltip("Start button that begins the triathlon race.")]
     public Button startButton;
@@ -25,6 +29,8 @@ public class MainMenuController : MonoBehaviour
 
     private void Awake()
     {
+        FindResultPanelReference();
+
         if (startButton == null)
         {
             Transform btnTr = transform.Find("CenterGroup/StartButton");
@@ -66,6 +72,71 @@ public class MainMenuController : MonoBehaviour
         if (audioButton != null) audioButton.onClick.AddListener(OnAudioClicked);
 
         UpdatePersonalBestDisplay();
+
+        // Check if UIScene was called to display the race results or start menu
+        if (GameManager.I != null && GameManager.I.showResultPanel)
+        {
+            ShowResultPanel();
+        }
+        else
+        {
+            ShowMenuPanel();
+        }
+    }
+
+    private void FindResultPanelReference()
+    {
+        if (resultPanel == null)
+        {
+            var canvas = GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                var rp = canvas.transform.Find("ResultPanel");
+                if (rp != null) resultPanel = rp.gameObject;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Activates the ResultPanel and deactivates this MenuPanel.
+    /// Refreshes ResultUIController with real calculations.
+    /// </summary>
+    public void ShowResultPanel()
+    {
+        FindResultPanelReference();
+
+        if (resultPanel != null)
+        {
+            resultPanel.SetActive(true);
+            var resultCtrl = resultPanel.GetComponent<ResultUIController>();
+            if (resultCtrl != null)
+            {
+                resultCtrl.menuPanel = gameObject;
+                resultCtrl.resultPanel = resultPanel;
+                resultCtrl.LoadAndDisplayResults();
+            }
+            gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Activates this MenuPanel and deactivates ResultPanel.
+    /// </summary>
+    public void ShowMenuPanel()
+    {
+        FindResultPanelReference();
+
+        if (GameManager.I != null)
+        {
+            GameManager.I.showResultPanel = false;
+        }
+
+        gameObject.SetActive(true);
+
+        if (resultPanel != null)
+        {
+            resultPanel.SetActive(false);
+        }
     }
 
     public void OnStartClicked()

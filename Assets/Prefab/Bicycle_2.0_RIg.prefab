@@ -7599,9 +7599,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cadenceMax: 8
   cadenceStep: 2
-  cadenceDecay: 3
+  cadenceDecay: 2.2
   antiCheeseMultiplier: 0.5
-  baseSpeed: 12
+  baseSpeed: 18
   staminaMax: 100
   passiveStaminaRegen: 0.5
   exhaustionRegenRate: 1
@@ -7610,8 +7610,8 @@ MonoBehaviour:
   perfectZoneCenter: 0.5
   perfectZoneHalfWidth: 0.08
   goodZoneHalfWidth: 0.2
-  perfectSpeedBurstMultiplier: 1.25
-  burstDuration: 1.2
+  perfectSpeedBurstMultiplier: 1.35
+  burstDuration: 1.5
   standHipLift: 0.12
   standHipForward: 0.06
   showHUD: 1

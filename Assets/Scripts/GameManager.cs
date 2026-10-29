@@ -3,7 +3,32 @@ using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager I;
+    private static GameManager _instance;
+    public static GameManager I
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                _instance = Object.FindAnyObjectByType<GameManager>();
+                if (_instance == null)
+                {
+                    GameObject go = new GameObject("GameManager");
+                    _instance = go.AddComponent<GameManager>();
+                    DontDestroyOnLoad(go);
+                }
+            }
+            return _instance;
+        }
+        set
+        {
+            _instance = value;
+        }
+    }
+
+    [Header("UI Panel Routing")]
+    [Tooltip("When true, UIScene displays ResultPanel instead of MenuPanel on load.")]
+    public bool showResultPanel = false;
 
     // ---- Cross-phase persistent state ----
     [Header("Stamina & Performance")]
@@ -39,13 +64,22 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         // Singleton + survive scene loads
-        if (I != null && I != this)
+        if (_instance != null && _instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        I = this;
+        _instance = this;
         DontDestroyOnLoad(gameObject);
+    }
+
+    /// <summary>
+    /// Calculates the total triathlon time by summing stage times.
+    /// </summary>
+    public float CalculateTotalTime()
+    {
+        totalTime = swimTime + cycleTime + runTime;
+        return totalTime;
     }
 
     /// <summary>
@@ -72,6 +106,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void ResetRace()
     {
+        showResultPanel = false;
         stamina = 100f;
         perfectStreak = 0;
         recovering = false;

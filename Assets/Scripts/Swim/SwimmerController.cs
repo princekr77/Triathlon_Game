@@ -660,7 +660,7 @@ public class SwimmerController : MonoBehaviour
         if (GameManager.I != null)
         {
             GameManager.I.swimDistance = stageDistance;
-            GameManager.I.totalTime += Time.deltaTime;
+            // GameManager.I.totalTime
             GameManager.I.swimTime = stageTime;
             GameManager.I.CalculateTotalScore();
         }

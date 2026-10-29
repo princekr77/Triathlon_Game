@@ -44,14 +44,14 @@ public class CyclingCadenceController : CycleController
     public float cadenceStep = 2.0f;
 
     [Tooltip("Cadence decay rate per second when no pedal press occurs.")]
-    public float cadenceDecay = 3.0f;
+    public float cadenceDecay = 2.2f;
 
     [Tooltip("Cadence penalty multiplier when anti-cheese is tripped.")]
     public float antiCheeseMultiplier = 0.5f;
 
     [Header("5.1 Speed & Distance Configuration")]
     [Tooltip("Base speed in m/s (default 12 m/s). 0 cadence = 3.6 m/s, 8 cadence = 16.8 m/s.")]
-    public new float baseSpeed = 12.0f;
+    public new float baseSpeed = 18.0f;
 
     [Tooltip("Total race distance in meters before finish (default 1000m).")]
     public float targetDistance = 1000.0f;
@@ -66,7 +66,7 @@ public class CyclingCadenceController : CycleController
     [Tooltip("Stamina recovery rate per second during exhaustion (until 20).")]
     public float exhaustionRegenRate = 1.0f;
 
-    [Header("PERFECT Rhythm Timing (§2.4 & §5.1)")]
+    [Header("PERFECT Rhythm Timing (Â§2.4 & Â§5.1)")]
     [Tooltip("Speed of rhythm marker back-and-forth oscillation.")]
     public float rhythmBarSpeed = 1.25f;
 
@@ -80,10 +80,10 @@ public class CyclingCadenceController : CycleController
     [Range(0.10f, 0.30f)] public float goodZoneHalfWidth = 0.20f;
 
     [Tooltip("Speed burst multiplier granted on PERFECT timing.")]
-    public float perfectSpeedBurstMultiplier = 1.25f;
+    public float perfectSpeedBurstMultiplier = 1.35f;
 
     [Tooltip("Duration in seconds of the PERFECT speed burst.")]
-    public float burstDuration = 1.2f;
+    public float burstDuration = 1.5f;
 
     [Header("Downhill / Uphill Modifiers")]
     [Tooltip("Speed boost multiplier when holding W (Stand uphill boost).")]
@@ -151,6 +151,7 @@ public class CyclingCadenceController : CycleController
     private Rigidbody rbComponent;
     private BicycleVehicle bicycleVehicle;
     private Animator pedalAnimatorRef;
+    private Transform pedalierTransform;
     private Vector3 initialHipLocalPos;
     private bool hasHipPos = false;
 
@@ -187,13 +188,38 @@ public class CyclingCadenceController : CycleController
         if (bicycleVehicle != null)
         {
             bicycleVehicle.InControl(true);
-            bicycleVehicle.motorForce = Mathf.Max(bicycleVehicle.motorForce, 160f);
+            bicycleVehicle.motorForce = Mathf.Max(bicycleVehicle.motorForce, 350f);
         }
 
-        // Find Pedalier Animator
-        Transform pedalier = transform.Find("Pedalier");
-        if (pedalier != null) pedalAnimatorRef = pedalier.GetComponent<Animator>();
-        if (pedalAnimatorRef == null) pedalAnimatorRef = GetComponentInChildren<Animator>();
+        // Find Pedalier recursively across all children
+        pedalierTransform = null;
+        foreach (var t in GetComponentsInChildren<Transform>(true))
+        {
+            if (t.name.Equals("Pedalier", System.StringComparison.OrdinalIgnoreCase))
+            {
+                pedalierTransform = t;
+                break;
+            }
+        }
+        if (pedalierTransform != null) pedalAnimatorRef = pedalierTransform.GetComponent<Animator>();
+
+        if (pedalAnimatorRef == null)
+        {
+            foreach (var anim in GetComponentsInChildren<Animator>(true))
+            {
+                if (anim.runtimeAnimatorController != null && anim.runtimeAnimatorController.name.IndexOf("Pedal", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    pedalAnimatorRef = anim;
+                    pedalierTransform = anim.transform;
+                    break;
+                }
+            }
+        }
+        if (pedalAnimatorRef != null)
+        {
+            pedalAnimatorRef.enabled = true;
+            if (!pedalAnimatorRef.gameObject.activeSelf) pedalAnimatorRef.gameObject.SetActive(true);
+        }
         pedalingAnimator = pedalAnimatorRef;
 
         // Find rider hips
@@ -219,7 +245,7 @@ public class CyclingCadenceController : CycleController
             {
                 stamina = Mathf.Clamp(GameManager.I.stamina, 0f, staminaMax);
             }
-            perfectStreak = 0; // Streak reset on transition (§5.2)
+            perfectStreak = 0; // Streak reset on transition (Â§5.2)
             targetDistance = GameManager.CycleDistance > 0 ? GameManager.CycleDistance : targetDistance;
         }
 
@@ -433,6 +459,9 @@ public class CyclingCadenceController : CycleController
         lastPedal = nextSide;
         pressedPedalThisFrame = true;
         cadencePulseTimer = 0.25f;
+
+        // Valid pedal stroke on Spacebar -> ADD CADENCE!
+        cadence = Mathf.Min(cadenceMax, cadence + cadenceStep);
 
         // Evaluate Rhythm Timing
         EvaluateRhythmMarkerTiming();
@@ -698,16 +727,45 @@ public class CyclingCadenceController : CycleController
 
     void UpdatePedalAnimator()
     {
-        if (pedalAnimatorRef == null) return;
+        float normCadence = Mathf.Clamp01(cadence / cadenceMax);
 
-        if (cadence <= 0.05f)
+        // 1. Driven via Animator component on Pedalier
+        if (pedalAnimatorRef != null && pedalAnimatorRef.enabled)
         {
-            pedalAnimatorRef.speed = 0f;
+            if (cadence > 0.05f)
+            {
+                // Active pedaling: animation speed scales with cadence
+                float targetAnimSpeed = Mathf.Lerp(0.8f, 3.5f, normCadence) * animSpeedScale;
+                pedalAnimatorRef.speed = targetAnimSpeed;
+            }
+            else if (finalSpeed > 1.0f)
+            {
+                // Coasting with forward speed: gentle glide rotation
+                pedalAnimatorRef.speed = Mathf.Clamp((finalSpeed / 20.0f) * 0.4f, 0.1f, 0.5f) * animSpeedScale;
+            }
+            else
+            {
+                pedalAnimatorRef.speed = 0f;
+            }
         }
-        else
+
+        // 2. Direct transform rotation fallback (guarantees pedals turn even if Animator is unassigned or disabled)
+        if (pedalierTransform != null && (pedalAnimatorRef == null || !pedalAnimatorRef.enabled || pedalAnimatorRef.runtimeAnimatorController == null))
         {
-            float targetAnimSpeed = (cadence / cadenceMax) * animSpeedScale * 2.2f;
-            pedalAnimatorRef.speed = Mathf.Clamp(targetAnimSpeed, 0.2f, 3.5f);
+            float spinSpeed = 0f;
+            if (cadence > 0.05f)
+            {
+                spinSpeed = Mathf.Lerp(180f, 720f, normCadence);
+            }
+            else if (finalSpeed > 1.0f)
+            {
+                spinSpeed = finalSpeed * 15f;
+            }
+
+            if (spinSpeed > 0f)
+            {
+                pedalierTransform.Rotate(Vector3.right, spinSpeed * Time.deltaTime, Space.Self);
+            }
         }
     }
 
@@ -774,6 +832,9 @@ public class CyclingCadenceController : CycleController
         // Calculate and save proper stage breakdown, total time, and total score in GameManager
         if (GameManager.I != null)
         {
+            // Show ResultPanel on UIScene
+            GameManager.I.showResultPanel = true;
+
             // 1. Cycle Stage Time
             GameManager.I.cycleTime = elapsedStageTime;
 
@@ -790,7 +851,7 @@ public class CyclingCadenceController : CycleController
 
             // 4. Carry over final stamina
             GameManager.I.stamina = stamina;
-            GameManager.I.perfectStreak = 0; // Streak resets on transition (§5.2)
+            GameManager.I.perfectStreak = 0; // Streak resets on transition (Â§5.2)
 
             Debug.Log($"[GameManager] Updated Breakdown -> Swim: {GameManager.I.swimTime:F2}s, Cycle: {GameManager.I.cycleTime:F2}s, Run: {GameManager.I.runTime:F2}s, TotalTime: {GameManager.I.totalTime:F2}s, TotalScore: {GameManager.I.totalScore:F0}");
         }
@@ -874,7 +935,7 @@ public class CyclingCadenceController : CycleController
 
         GUILayout.Space(3);
 
-        // 5. Streak Counter (§5.2: 5 PERFECT -> +5 Stamina)
+        // 5. Streak Counter (Â§5.2: 5 PERFECT -> +5 Stamina)
         string stars = new string('*', perfectStreak) + new string('-', 5 - perfectStreak);
         GUILayout.Label($"<b>Streak:</b> {perfectStreak}/5 <color=yellow>[{stars}]</color> <size=11>(5 PERFECT -> +5 Stamina)</size>");
 
@@ -999,3 +1060,4 @@ public class CyclingCadenceController : CycleController
         GUI.color = Color.white;
     }
 }
+

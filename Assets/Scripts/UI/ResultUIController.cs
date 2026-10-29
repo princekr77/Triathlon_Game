@@ -75,6 +75,11 @@ public class ResultUIController : MonoBehaviour
         }
     }
 
+    private void OnEnable()
+    {
+        LoadAndDisplayResults();
+    }
+
     private void Start()
     {
         if (retryButton != null) retryButton.onClick.AddListener(OnRestartClicked);
@@ -86,26 +91,24 @@ public class ResultUIController : MonoBehaviour
 
     public void LoadAndDisplayResults()
     {
-        float pTime = defaultPlayerTime;
+        float pTime = 0f;
         float aiTime = defaultAiTime;
-        float swim = defaultSwimTime;
-        float cycle = defaultCycleTime;
-        float run = defaultRunTime;
-        float swimD = defaultSwimDist;
-        float cycleD = defaultCycleDist;
-        float runD = defaultRunDist;
-        float stamina = defaultStamina;
-        int coins = defaultCoins;
-        float cValue = defaultCoinValue;
-        float bonus = defaultBonus;
+        float swim = 0f;
+        float cycle = 0f;
+        float run = 0f;
+        float swimD = 0f;
+        float cycleD = 0f;
+        float runD = 0f;
+        float stamina = 100f;
+        int coins = 0;
+        float cValue = 10f;
+        float bonus = 0f;
 
         if (GameManager.I != null)
         {
-            if (GameManager.I.totalTime > 0) pTime = GameManager.I.totalTime;
-            if (GameManager.I.aiTime > 0) aiTime = GameManager.I.aiTime;
-            if (GameManager.I.swimTime > 0) swim = GameManager.I.swimTime;
-            if (GameManager.I.cycleTime > 0) cycle = GameManager.I.cycleTime;
-            if (GameManager.I.runTime > 0) run = GameManager.I.runTime;
+            swim = GameManager.I.swimTime;
+            cycle = GameManager.I.cycleTime;
+            run = GameManager.I.runTime;
 
             swimD = (GameManager.I.swimDistance > 0) ? GameManager.I.swimDistance : (swim > 0 ? GameManager.DefaultSwimDistance : 0f);
             cycleD = (GameManager.I.cycleDistance > 0) ? GameManager.I.cycleDistance : (cycle > 0 ? GameManager.DefaultCycleDistance : 0f);
@@ -115,6 +118,34 @@ public class ResultUIController : MonoBehaviour
             coins = GameManager.I.coinsCollected;
             cValue = GameManager.I.coinValue;
             bonus = GameManager.I.bonuses;
+
+            // If testing a single stage directly (e.g. Cycle_Scene only), provide simulated benchmark stats for unplayed stages
+            if (swim <= 0f && run <= 0f && cycle > 0f)
+            {
+                swim = defaultSwimTime;
+                run = defaultRunTime;
+                swimD = defaultSwimDist;
+                runD = defaultRunDist;
+            }
+
+            pTime = swim + cycle + run;
+            aiTime = (GameManager.I.aiTime > 0) ? GameManager.I.aiTime : defaultAiTime;
+        }
+        else
+        {
+            // Pure fallback if GameManager is absent
+            pTime = defaultPlayerTime;
+            aiTime = defaultAiTime;
+            swim = defaultSwimTime;
+            cycle = defaultCycleTime;
+            run = defaultRunTime;
+            swimD = defaultSwimDist;
+            cycleD = defaultCycleDist;
+            runD = defaultRunDist;
+            stamina = defaultStamina;
+            coins = defaultCoins;
+            cValue = defaultCoinValue;
+            bonus = defaultBonus;
         }
 
         // Section 6.1 Formula: totalScore = Σ(stageDistance for Run+Swim+Cycle) + (coinsCollected * coinValue) + bonuses
@@ -250,6 +281,11 @@ public class ResultUIController : MonoBehaviour
     {
         Debug.Log("[ResultUI] Menu button clicked -> setting MenuPanel active true and ResultPanel false");
 
+        if (GameManager.I != null)
+        {
+            GameManager.I.showResultPanel = false;
+        }
+
         if (menuPanel == null)
         {
             var canvas = GetComponentInParent<Canvas>();
@@ -278,9 +314,6 @@ public class ResultUIController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Next Race Button: Resets race and starts a new triathlon.
-    /// </summary>
     public void OnNextRaceClicked()
     {
         Debug.Log("[ResultUI] Next Race clicked");
