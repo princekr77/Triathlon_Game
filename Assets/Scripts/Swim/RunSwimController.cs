@@ -53,8 +53,8 @@ public class RunSwimController : MonoBehaviour
 #endif
 
     [Header("Camera Follow")]
-    [Tooltip("If true, automatically positions and aligns Camera.main to follow this player smoothly.")]
-    public bool autoFollowCamera = true;
+    [Tooltip("If true and no SwimCameraFollow exists on Main Camera, automatically positions and aligns targetCamera to follow this player.")]
+    public bool autoFollowCamera = false;
     public Vector3 cameraOffset = new Vector3(0f, 3.5f, -6.5f);
     public float cameraFollowSpeed = 10.0f;
     public float cameraRotationSpeed = 8.0f;
@@ -256,7 +256,7 @@ public class RunSwimController : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (autoFollowCamera && targetCamera != null)
+        if (autoFollowCamera && targetCamera != null && targetCamera.GetComponent<SwimCameraFollow>() == null)
         {
             UpdateCameraFollow();
         }

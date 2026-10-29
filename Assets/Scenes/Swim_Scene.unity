@@ -391,7 +391,7 @@ MonoBehaviour:
   runStartSpawnEuler: {x: 0, y: 180, z: 0}
   swimSpawnPosition: {x: 161.3, y: 12.25, z: 470}
   swimSpawnEuler: {x: 0, y: 180, z: 0}
-  runExitSpawnPosition: {x: 161.3, y: 12, z: 244}
+  runExitSpawnPosition: {x: 161.3, y: 23.7, z: 234.57}
   runExitSpawnEuler: {x: 0, y: 180, z: 0}
   enterSwimPrompt: Click E to Swim
   exitSwimPrompt: Click E to exit swim
@@ -466,6 +466,7 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
+  - component: {fileID: 330585548}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -591,6 +592,26 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &330585548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a10d932e6504a43b2f57c919d3f18e2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SwimCameraFollow
+  target: {fileID: 0}
+  autoDetectActivePlayer: 1
+  offset: {x: 1, y: 8.12, z: 9.39}
+  fixedEulerAngles: {x: 22, y: 180, z: 0}
+  captureSceneOffsetOnStart: 1
+  positionSmoothSpeed: 10
+  lockRotation: 1
+  snapOnStart: 1
 --- !u!1001 &335036865
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1409,6 +1430,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1180571157
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1180571158}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &1180571158
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1180571157}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 161.3, y: 12, z: 244}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1312287882
 GameObject:
   m_ObjectHideFlags: 0
@@ -2131,3 +2183,4 @@ SceneRoots:
   - {fileID: 2058115980}
   - {fileID: 792628668}
   - {fileID: 1423231129}
+  - {fileID: 1180571158}

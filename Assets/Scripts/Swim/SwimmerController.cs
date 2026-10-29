@@ -145,8 +145,8 @@ public class SwimmerController : MonoBehaviour
     public string isSwimmingParam = "isSwimming";
 
     [Header("Camera Follow")]
-    [Tooltip("Automatically positions and smoothly follows with Camera.main.")]
-    public bool autoFollowCamera = true;
+    [Tooltip("If true and no SwimCameraFollow exists on Main Camera, automatically positions and aligns Camera.main.")]
+    public bool autoFollowCamera = false;
     public Vector3 cameraOffset = new Vector3(0f, 3.2f, 6.5f);
     public float cameraFollowSpeed = 10.0f;
     public float cameraRotationSpeed = 8.0f;
@@ -350,7 +350,7 @@ public class SwimmerController : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (autoFollowCamera && mainCam != null)
+        if (autoFollowCamera && mainCam != null && mainCam.GetComponent<SwimCameraFollow>() == null)
         {
             UpdateCameraFollow();
         }
@@ -672,9 +672,13 @@ public class SwimmerController : MonoBehaviour
         // Check if finished by target distance or reached canal end
         if (stageDistance >= targetDistance || transform.position.z <= (minCanalZ + 2.0f))
         {
-            // Swimmer reached exit end
-            var transitionMgr = FindFirstObjectByType<SwimTransitionManager>();
-            if (transitionMgr == null)
+            // Swimmer reached exit end - trigger transition to finish line
+            var transitionMgr = SwimTransitionManager.Instance != null ? SwimTransitionManager.Instance : FindFirstObjectByType<SwimTransitionManager>();
+            if (transitionMgr != null)
+            {
+                transitionMgr.SwitchToRun();
+            }
+            else
             {
                 // Direct finish transition to Cycle_Scene if no manager is present
                 CompleteSwimStage();
@@ -770,33 +774,44 @@ public class SwimmerController : MonoBehaviour
     {
         if (!showHUD) return;
 
-        // --- SECTION 4.4 UNIFIED HUD OVERLAY ---
-        int hudWidth = 380;
-        int hudHeight = 220;
-        Rect hudRect = new Rect(16, 16, hudWidth, hudHeight);
+        float screenW = Screen.width;
+        float screenH = Screen.height;
+        float uiScale = Mathf.Clamp(screenW / 1000f, 0.85f, 1.8f);
+
+        // --- SECTION 4.4 RESPONSIVE STRETCHED HUD OVERLAY ---
+        float hudMargin = Mathf.Clamp(screenW * 0.025f, 12f, 32f);
+        float hudX = hudMargin;
+        float hudY = Mathf.Clamp(screenH * 0.018f, 10f, 22f);
+        float hudWidth = screenW - (hudMargin * 2f);
+        float hudHeight = Mathf.Clamp(screenH * 0.30f, 205f, 310f);
+        Rect hudRect = new Rect(hudX, hudY, hudWidth, hudHeight);
 
         // Semi-transparent dark background
         GUI.color = new Color(0.08f, 0.10f, 0.16f, 0.90f);
         GUI.DrawTexture(hudRect, Texture2D.whiteTexture);
         GUI.color = Color.white;
 
-        GUILayout.BeginArea(new Rect(hudRect.x + 12, hudRect.y + 10, hudWidth - 24, hudHeight - 20));
+        int labelFontSize = Mathf.RoundToInt(13f * uiScale);
+        int subFontSize = Mathf.RoundToInt(11f * uiScale);
+        float innerMargin = Mathf.Clamp(hudWidth * 0.015f, 10f, 24f);
+
+        GUILayout.BeginArea(new Rect(hudRect.x + innerMargin, hudRect.y + 8f, hudWidth - (innerMargin * 2f), hudHeight - 16f));
 
         // 1. Distance Header & Bar
         float dist01 = Mathf.Clamp01(stageDistance / targetDistance);
-        GUILayout.Label($"<b>Distance:</b> {stageDistance:F0}m / {targetDistance:F0}m  ({dist01 * 100f:F0}%)", GetBoldLabelStyle());
-        DrawProgressBar(dist01, new Color(0.2f, 0.75f, 1.0f), 12);
+        GUILayout.Label($"<b>Distance:</b> {stageDistance:F0}m / {targetDistance:F0}m  ({dist01 * 100f:F0}%)", GetBoldLabelStyle(labelFontSize));
+        DrawProgressBar(dist01, new Color(0.2f, 0.75f, 1.0f), Mathf.RoundToInt(14f * uiScale));
 
-        GUILayout.Space(6);
+        GUILayout.Space(Mathf.RoundToInt(5f * uiScale));
 
         // 2. Oxygen Bar (Shared Stamina labeled "Oxygen")
         float oxy01 = Mathf.Clamp01(oxygen / maxOxygen);
         Color oxyColor = isExhausted ? Color.red : (oxy01 > 0.45f ? new Color(0.1f, 0.9f, 0.85f) : (oxy01 > 0.2f ? Color.yellow : new Color(1f, 0.35f, 0.35f)));
         string oxyStatus = isExhausted ? "<color=red><b>EXHAUSTED! (+1/s Recovery)</b></color>" : $"{oxygen:F0}%";
-        GUILayout.Label($"<b>Oxygen:</b> {oxyStatus}", GetBoldLabelStyle());
-        DrawProgressBar(oxy01, oxyColor, 14);
+        GUILayout.Label($"<b>Oxygen:</b> {oxyStatus}", GetBoldLabelStyle(labelFontSize));
+        DrawProgressBar(oxy01, oxyColor, Mathf.RoundToInt(16f * uiScale));
 
-        GUILayout.Space(6);
+        GUILayout.Space(Mathf.RoundToInt(5f * uiScale));
 
         // 3. Streak Counter (§4.2)
         string stars = "";
@@ -804,21 +819,22 @@ public class SwimmerController : MonoBehaviour
         {
             stars += (i < perfectStreak) ? "★ " : "☆ ";
         }
-        GUILayout.Label($"<b>Streak:</b> {perfectStreak}/{streakGoal}  <color=yellow>{stars}</color> <size=11>(5 PERFECT -> +5 Oxygen)</size>", GetBoldLabelStyle());
+        GUILayout.Label($"<b>Streak:</b> {perfectStreak}/{streakGoal}  <color=yellow>{stars}</color>  <size={subFontSize}>(5 PERFECT -> +5 Oxygen)</size>", GetBoldLabelStyle(labelFontSize));
 
-        GUILayout.Space(4);
+        GUILayout.Space(Mathf.RoundToInt(4f * uiScale));
 
         // 4. Rhythm Timing Bar with Green/Yellow Zones & Moving Marker
-        GUILayout.Label("<b>Rhythm Timing (Press SPACE / Tap on Green):</b>", GetBoldLabelStyle());
-        DrawRhythmTimingBar();
+        GUILayout.Label("<b>Rhythm Timing (Press SPACE / Tap on Green):</b>", GetBoldLabelStyle(labelFontSize));
+        DrawRhythmTimingBar(Mathf.RoundToInt(24f * uiScale));
 
-        GUILayout.Space(4);
+        GUILayout.Space(Mathf.RoundToInt(4f * uiScale));
 
         // 5. Timing Feedback Banner
+        int feedbackFontSize = Mathf.RoundToInt(14f * uiScale);
         if (streakRewardTimer > 0f)
         {
             GUI.color = Color.yellow;
-            GUILayout.Label("★ <b>STREAK COMPLETED! +5 OXYGEN REWARD!</b> ★", GetBoldLabelStyle());
+            GUILayout.Label($"★ <b>STREAK COMPLETED! +5 OXYGEN REWARD!</b> ★", GetBoldLabelStyle(feedbackFontSize));
             GUI.color = Color.white;
         }
         else if (timingBannerTimer > 0f)
@@ -826,19 +842,19 @@ public class SwimmerController : MonoBehaviour
             if (lastTimingResult == TimingResult.Perfect)
             {
                 GUI.color = Color.green;
-                GUILayout.Label("★ <b>PERFECT STROKE! (+25% SPEED BURST)</b> ★", GetBoldLabelStyle());
+                GUILayout.Label($"★ <b>PERFECT STROKE! (+25% SPEED BURST)</b> ★", GetBoldLabelStyle(feedbackFontSize));
                 GUI.color = Color.white;
             }
             else if (lastTimingResult == TimingResult.Good)
             {
                 GUI.color = Color.yellow;
-                GUILayout.Label("✔ <b>GOOD STROKE</b>", GetBoldLabelStyle());
+                GUILayout.Label($"✔ <b>GOOD STROKE</b>", GetBoldLabelStyle(feedbackFontSize));
                 GUI.color = Color.white;
             }
             else if (lastTimingResult == TimingResult.Miss)
             {
                 GUI.color = new Color(1f, 0.4f, 0.4f);
-                GUILayout.Label("✘ <b>MISS! (Hit when Marker is on Green)</b>", GetBoldLabelStyle());
+                GUILayout.Label($"✘ <b>MISS! (Hit when Marker is on Green)</b>", GetBoldLabelStyle(feedbackFontSize));
                 GUI.color = Color.white;
             }
         }
@@ -848,7 +864,7 @@ public class SwimmerController : MonoBehaviour
         // --- ANDROID ON-SCREEN TOUCH CONTROLS ---
         if (showTouchControls)
         {
-            DrawAndroidTouchHUD();
+            DrawAndroidTouchHUD(screenW, screenH, uiScale);
         }
     }
 
@@ -866,9 +882,9 @@ public class SwimmerController : MonoBehaviour
         GUI.color = Color.white;
     }
 
-    private void DrawRhythmTimingBar()
+    private void DrawRhythmTimingBar(float height)
     {
-        Rect barRect = GUILayoutUtility.GetRect(24, 22);
+        Rect barRect = GUILayoutUtility.GetRect(24, height);
 
         // Bar background
         GUI.color = new Color(0.12f, 0.14f, 0.20f, 0.95f);
@@ -887,28 +903,35 @@ public class SwimmerController : MonoBehaviour
         GUI.DrawTexture(new Rect(greenX, barRect.y, greenW, barRect.height), Texture2D.whiteTexture);
 
         // Moving Marker (Red Line Pointer)
-        float markerX = barRect.x + (rhythmMarkerPos * barRect.width) - 3f;
+        float markerWidth = Mathf.Clamp(barRect.width * 0.015f, 6f, 14f);
+        float markerX = barRect.x + (rhythmMarkerPos * barRect.width) - (markerWidth * 0.5f);
         GUI.color = Color.red;
-        GUI.DrawTexture(new Rect(markerX, barRect.y - 2, 6, barRect.height + 4), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(markerX, barRect.y - 3, markerWidth, barRect.height + 6), Texture2D.whiteTexture);
         GUI.color = Color.white;
     }
 
-    private void DrawAndroidTouchHUD()
+    private void DrawAndroidTouchHUD(float screenW, float screenH, float uiScale)
     {
-        int btnW = 110;
-        int btnH = 75;
-        int margin = 20;
+        float btnW = Mathf.Clamp(screenW * 0.16f, 110f, 220f);
+        float btnH = Mathf.Clamp(screenH * 0.12f, 70f, 130f);
+        float strokeBtnW = Mathf.Clamp(screenW * 0.22f, 150f, 300f);
+        float strokeBtnH = Mathf.Clamp(screenH * 0.14f, 80f, 150f);
+        float margin = Mathf.Clamp(screenW * 0.03f, 16f, 40f);
+
+        int navFontSize = Mathf.RoundToInt(18f * uiScale);
+        int strokeFontSize = Mathf.RoundToInt(18f * uiScale);
+        int strokeSubFontSize = Mathf.RoundToInt(11f * uiScale);
 
         // Bottom Left: Steering buttons
-        Rect leftSteerRect = new Rect(margin, Screen.height - btnH - margin, btnW, btnH);
-        Rect rightSteerRect = new Rect(margin + btnW + 12, Screen.height - btnH - margin, btnW, btnH);
+        Rect leftSteerRect = new Rect(margin, screenH - btnH - margin, btnW, btnH);
+        Rect rightSteerRect = new Rect(margin + btnW + 12f, screenH - btnH - margin, btnW, btnH);
 
         GUI.color = new Color(0.12f, 0.18f, 0.28f, 0.85f);
-        if (GUI.RepeatButton(leftSteerRect, "<size=18><b>◄ LEFT</b></size>"))
+        if (GUI.RepeatButton(leftSteerRect, $"<size={navFontSize}><b>◄ LEFT</b></size>"))
         {
             touchSteerHeld = -1.0f;
         }
-        else if (GUI.RepeatButton(rightSteerRect, "<size=18><b>RIGHT ►</b></size>"))
+        else if (GUI.RepeatButton(rightSteerRect, $"<size={navFontSize}><b>RIGHT ►</b></size>"))
         {
             touchSteerHeld = 1.0f;
         }
@@ -918,15 +941,13 @@ public class SwimmerController : MonoBehaviour
         }
 
         // Bottom Right: Prominent STROKE Button (Tap on Green)
-        int strokeBtnW = 160;
-        int strokeBtnH = 85;
-        Rect strokeRect = new Rect(Screen.width - strokeBtnW - margin, Screen.height - strokeBtnH - margin, strokeBtnW, strokeBtnH);
+        Rect strokeRect = new Rect(screenW - strokeBtnW - margin, screenH - strokeBtnH - margin, strokeBtnW, strokeBtnH);
 
         // Pulse button green when marker is in green zone
         bool inGreen = Mathf.Abs(rhythmMarkerPos - perfectZoneCenter) <= perfectZoneHalfWidth;
         GUI.color = inGreen ? new Color(0.15f, 0.95f, 0.35f, 0.95f) : new Color(0.15f, 0.65f, 0.95f, 0.85f);
 
-        if (GUI.Button(strokeRect, "<size=18><b>[ STROKE ]</b></size>\n<size=11><b>TAP ON GREEN</b></size>"))
+        if (GUI.Button(strokeRect, $"<size={strokeFontSize}><b>[ STROKE ]</b></size>\n<size={strokeSubFontSize}><b>TAP ON GREEN</b></size>"))
         {
             PerformStrokeWithTiming();
         }
@@ -934,11 +955,11 @@ public class SwimmerController : MonoBehaviour
         GUI.color = Color.white;
     }
 
-    private GUIStyle GetBoldLabelStyle()
+    private GUIStyle GetBoldLabelStyle(int fontSize = 13)
     {
         GUIStyle style = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 13,
+            fontSize = fontSize,
             fontStyle = FontStyle.Normal
         };
         style.normal.textColor = Color.white;
