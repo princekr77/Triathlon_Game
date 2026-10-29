@@ -14,7 +14,7 @@ using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 ///   * Auto-run: Moves forward automatically at runSpeed (constant or gently ramping). No stamina, no regen, no exhaustion.
 ///   * Steering: A/D, Left/Right arrows, InputSystem_Actions, or Android touch swipe in the Left Zone.
 ///   * Jump: Space, Up arrow, InputSystem_Actions, or Android touch tap in the Right Zone.
-///   * Finish: When stageDistance >= runDistance, completes stage and loads Swim_Scene.
+///   * Finish: When stageDistance >= runDistance, completes stage and loads Cycle_Scene.
 /// - 3.2 Scoring:
 ///   * stageScore = stageDistance (in meters). No bonuses.
 /// - 3.3 HUD:
@@ -57,11 +57,11 @@ public class RunnerController : MonoBehaviour
     public float minLateralX = -12.0f;
     public float maxLateralX = 12.0f;
 
-    [Tooltip("Distance between lanes in Lane-Based mode (meters).")]
-    public float laneDistance = 3.5f;
+    [Tooltip("Distance between lanes in Lane-Based mode (meters: Left=813, Center=816, Right=819).")]
+    public float laneDistance = 3.0f;
 
-    [Tooltip("Maximum lane index on each side in Lane-Based mode (e.g. 2 allows 5 lanes: -2, -1, 0, 1, 2).")]
-    public int maxLaneIndex = 2;
+    [Tooltip("Maximum lane index on each side in Lane-Based mode (1 allows 3 lanes: Left -1, Center 0, Right 1).")]
+    public int maxLaneIndex = 1;
 
     [Tooltip("Speed of lane transition interpolation.")]
     public float laneChangeSpeed = 12.0f;
@@ -84,7 +84,7 @@ public class RunnerController : MonoBehaviour
     public float runDistance = 500.0f;
 
     [Tooltip("Name of the next scene to load upon stage completion.")]
-    public string nextSceneName = "Swim_Scene";
+    public string nextSceneName = "Cycle_Scene";
 
     [Header("Animation Parameters (Player_Controller)")]
     [Tooltip("Reference to the Animator component (uses Player_Controller).")]
@@ -184,6 +184,7 @@ public class RunnerController : MonoBehaviour
     private int isRunningHash;
     private int isGroundedHash;
     private int jumpTriggerHash;
+    private int hitTriggerHash;
 
     // Mobile touch tracking (Android)
     private int steerFingerId = -1;
@@ -247,6 +248,7 @@ public class RunnerController : MonoBehaviour
             isRunningHash = Animator.StringToHash(isRunningParam);
             isGroundedHash = Animator.StringToHash(isGroundedParam);
             jumpTriggerHash = Animator.StringToHash(jumpTriggerParam);
+            hitTriggerHash = Animator.StringToHash("Hit");
         }
 
         currentSpeed = runSpeed;
@@ -629,19 +631,29 @@ public class RunnerController : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     /// <summary>
     /// Android Touch Inputs:
-    /// - Left Zone (X < 50% width): Swipe/drag steering
-    /// - Right Zone (X >= 50% width): Tap to jump
+    /// - Left Zone (X < 50% width): Swipe left/right or drag steering (supports lane shifts and lateral steering)
+    /// - Right Zone (X >= 50% width): Tap to jump over low obstacles
     /// </summary>
     private void ReadAndroidTouchInputs(ref float outSteer, ref bool outJump)
     {
         touchSteerInput = 0f;
         float halfScreenWidth = Screen.width * 0.5f;
 
+        // Ensure EnhancedTouchSupport is active
+        if (!EnhancedTouchSupport.enabled)
+        {
+            EnhancedTouchSupport.Enable();
+        }
+
+        bool touchProcessed = false;
+
+        // 1. Primary multi-touch via EnhancedTouch
         foreach (var touch in Touch.activeTouches)
         {
+            touchProcessed = true;
             Vector2 screenPos = touch.screenPosition;
 
-            // --- LEFT ZONE: SWIPE TO STEER ---
+            // --- LEFT ZONE: SWIPE / DRAG TO STEER ---
             if (screenPos.x < halfScreenWidth)
             {
                 if (touch.phase == UnityEngine.InputSystem.TouchPhase.Began)
@@ -670,8 +682,24 @@ public class RunnerController : MonoBehaviour
                     }
                     else
                     {
-                        float normalizedDelta = deltaX / (Screen.width * 0.25f);
-                        touchSteerInput = Mathf.Clamp(normalizedDelta * touchDragSensitivity, -1f, 1f);
+                        // Continuous lateral: support both quick flick lane hops and smooth dragging
+                        if (deltaX < -swipeThresholdPixels)
+                        {
+                            targetLateralX -= laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = screenPos;
+                        }
+                        else if (deltaX > swipeThresholdPixels)
+                        {
+                            targetLateralX += laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = screenPos;
+                        }
+                        else
+                        {
+                            float normalizedDelta = deltaX / (Screen.width * 0.25f);
+                            touchSteerInput = Mathf.Clamp(normalizedDelta * touchDragSensitivity, -1f, 1f);
+                        }
                     }
                 }
                 else if (touch.touchId == steerFingerId &&
@@ -691,9 +719,70 @@ public class RunnerController : MonoBehaviour
             }
         }
 
-        // Editor mouse simulation for testing Android controls without a device
+        // 2. Direct fallback via Touchscreen.current if activeTouches is empty on some Android devices/emulators
+        if (!touchProcessed && Touchscreen.current != null)
+        {
+            var primary = Touchscreen.current.primaryTouch;
+            if (primary.press.isPressed || primary.phase.ReadValue() == UnityEngine.InputSystem.TouchPhase.Began)
+            {
+                touchProcessed = true;
+                Vector2 screenPos = primary.position.ReadValue();
+                var phase = primary.phase.ReadValue();
+
+                if (screenPos.x < halfScreenWidth)
+                {
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Began)
+                    {
+                        steerTouchStartPos = screenPos;
+                        isSteerTouching = true;
+                    }
+                    else if (phase == UnityEngine.InputSystem.TouchPhase.Moved || phase == UnityEngine.InputSystem.TouchPhase.Stationary)
+                    {
+                        float deltaX = screenPos.x - steerTouchStartPos.x;
+                        if (movementMode == MovementMode.LaneBased)
+                        {
+                            if (deltaX < -swipeThresholdPixels) { ShiftLane(-1); steerTouchStartPos = screenPos; }
+                            else if (deltaX > swipeThresholdPixels) { ShiftLane(1); steerTouchStartPos = screenPos; }
+                        }
+                        else
+                        {
+                            if (deltaX < -swipeThresholdPixels)
+                            {
+                                targetLateralX -= laneDistance;
+                                if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                                steerTouchStartPos = screenPos;
+                            }
+                            else if (deltaX > swipeThresholdPixels)
+                            {
+                                targetLateralX += laneDistance;
+                                if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                                steerTouchStartPos = screenPos;
+                            }
+                            else
+                            {
+                                float normalizedDelta = deltaX / (Screen.width * 0.25f);
+                                touchSteerInput = Mathf.Clamp(normalizedDelta * touchDragSensitivity, -1f, 1f);
+                            }
+                        }
+                    }
+                    else if (phase == UnityEngine.InputSystem.TouchPhase.Ended || phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+                    {
+                        isSteerTouching = false;
+                    }
+                }
+                else
+                {
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Began)
+                    {
+                        outJump = true;
+                    }
+                }
+            }
+        }
+
+        // 3. Editor mouse simulation for testing Android controls directly in Game View
 #if UNITY_EDITOR
-        if (Touch.activeTouches.Count == 0 && UnityEngine.InputSystem.Mouse.current != null)
+        if (!touchProcessed && UnityEngine.InputSystem.Mouse.current != null)
         {
             var mouse = UnityEngine.InputSystem.Mouse.current;
             Vector2 mousePos = mouse.position.ReadValue();
@@ -723,8 +812,23 @@ public class RunnerController : MonoBehaviour
                     }
                     else
                     {
-                        float normalizedDelta = deltaX / (Screen.width * 0.25f);
-                        touchSteerInput = Mathf.Clamp(normalizedDelta * touchDragSensitivity, -1f, 1f);
+                        if (deltaX < -swipeThresholdPixels)
+                        {
+                            targetLateralX -= laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = mousePos;
+                        }
+                        else if (deltaX > swipeThresholdPixels)
+                        {
+                            targetLateralX += laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = mousePos;
+                        }
+                        else
+                        {
+                            float normalizedDelta = deltaX / (Screen.width * 0.25f);
+                            touchSteerInput = Mathf.Clamp(normalizedDelta * touchDragSensitivity, -1f, 1f);
+                        }
                     }
                 }
                 else if (mouse.leftButton.wasReleasedThisFrame)
@@ -766,7 +870,22 @@ public class RunnerController : MonoBehaviour
                     }
                     else
                     {
-                        touchSteerInput = Mathf.Clamp((deltaX / (Screen.width * 0.25f)) * touchDragSensitivity, -1f, 1f);
+                        if (deltaX < -swipeThresholdPixels)
+                        {
+                            targetLateralX -= laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = t.position;
+                        }
+                        else if (deltaX > swipeThresholdPixels)
+                        {
+                            targetLateralX += laneDistance;
+                            if (clampLateralMovement) targetLateralX = Mathf.Clamp(targetLateralX, minLateralX, maxLateralX);
+                            steerTouchStartPos = t.position;
+                        }
+                        else
+                        {
+                            touchSteerInput = Mathf.Clamp((deltaX / (Screen.width * 0.25f)) * touchDragSensitivity, -1f, 1f);
+                        }
                     }
                 }
             }
@@ -864,8 +983,8 @@ public class RunnerController : MonoBehaviour
 
     /// <summary>
     /// Completes the running stage (GDD 3.1 & 3.2):
-    /// - Records stageScore = stageDistance in meters.
-    /// - Transitions to Swim_Scene.
+    /// - Records stageScore = stageDistance in meters + coinsCollected * coinValue.
+    /// - Transitions to Cycle_Scene.
     /// </summary>
     public void CompleteStage()
     {
@@ -874,17 +993,18 @@ public class RunnerController : MonoBehaviour
 
         StopRunning();
 
-        // 3.2 Score: stageScore = stageDistance (meters). No bonuses.
-        float stageScore = stageDistance;
+        // 3.2 What Counts Toward Score: stageScore = stageDistance (in meters) + coinsCollected * coinValue. No bonuses.
+        stageScore = (int)stageDistance + (coinsCollected * coinValue);
         if (GameManager.I != null)
         {
-            GameManager.I.totalScore += stageScore;
+            GameManager.I.coinsCollected = coinsCollected;
+            GameManager.I.totalScore = stageScore;
             GameManager.I.totalTime += stageTime;
         }
 
         Debug.Log($"[Running Complete] Stage finished! Distance: {stageDistance:F1}m, Time: {stageTime:F1}s, Score: {stageScore:F0}. Transitioning to: {nextSceneName}");
 
-        // Transition to Swim_Scene
+        // Transition to Cycle_Scene
         if (TransitionManager.Instance != null)
         {
             TransitionManager.Instance.BeginTransition(
@@ -938,15 +1058,22 @@ public class RunnerController : MonoBehaviour
 
     /// <summary>
     /// Implements GDD §3.1: on obstacle hit: currentSpeed *= 0.5f for 1.0s, then ramp back to runSpeed
+    /// (No damage, no stamina loss, no death — stage still ends at finish line.)
     /// </summary>
     public void OnObstacleHit(float duration = 1.0f, float multiplier = 0.5f)
     {
         if (stageCompleted || !isRunningActive) return;
 
-        currentSpeed = Mathf.Max(runSpeed * multiplier, 2.5f);
+        currentSpeed = Mathf.Max(currentSpeed * multiplier, 2.0f);
         obstacleSlowTimer = duration;
         isSlowedByObstacle = true;
-        Debug.Log($"[RunnerController] Hit obstacle! Current speed halved to {currentSpeed:F1} m/s for {duration:F1}s");
+
+        if (animator != null && hitTriggerHash != 0)
+        {
+            animator.SetTrigger(hitTriggerHash);
+        }
+
+        Debug.Log($"[RunnerController] Hit obstacle! Current speed halved to {currentSpeed:F1} m/s for {duration:F1}s, then ramping back to {runSpeed:F1} m/s");
     }
 
     private void OnControllerColliderHit(ControllerColliderHit hit)
@@ -1117,7 +1244,7 @@ public class RunnerController : MonoBehaviour
                 alignment = TextAnchor.MiddleCenter
             };
             subStyle.normal.textColor = Color.white;
-            GUI.Label(new Rect(0, screenH * 0.35f + 55, screenW, 40), "Entering Swim Stage...", subStyle);
+            GUI.Label(new Rect(0, screenH * 0.35f + 55, screenW, 40), "Entering Cycle Stage...", subStyle);
         }
 
         // Android Touch Controls layout indicators

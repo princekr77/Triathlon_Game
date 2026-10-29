@@ -2679,15 +2679,15 @@ MonoBehaviour:
   clampLateralMovement: 0
   minLateralX: -3.5
   maxLateralX: 3.5
-  laneDistance: 2.5
-  maxLaneIndex: 2
+  laneDistance: 3
+  maxLaneIndex: 1
   laneChangeSpeed: 12
   jumpHeight: 1.8
   gravity: 24
   fallMultiplier: 1.2
   groundedStickForce: -2
   runDistance: 500
-  nextSceneName: Swim_Scene
+  nextSceneName: Cycle_Scene
   animator: {fileID: 2757063978594661432}
   isRunningParam: isRunning
   isGroundedParam: isGrounded
