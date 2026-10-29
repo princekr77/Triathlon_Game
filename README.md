@@ -1,26 +1,11 @@
-# 🏃‍♂️🚴‍♂️🏊‍♂️ Triathlon 3D (Triathlon Game)
+# Triathlon 3D (Triathlon Game)
 
 A complete, multi-stage 3D triathlon sports simulation game developed in **Unity 6 (6000.3.21f1)** using the **Universal Render Pipeline (URP)**. Players compete across three distinct sporting disciplines—**Running**, **Swimming**, and **Cycling**—managing cross-stage stamina, rhythm timing, cadence pacing, and obstacle navigation to beat benchmark AI times and set high scores.
 
 ---
 
-## 📋 Assignment Submission Checklist
 
-| Requirement / Component | Implementation Status | Key Script / Asset Reference | Description |
-| :--- | :---: | :--- | :--- |
-| **Setup & Build Pipeline** | ✅ Complete | `EditorBuildSettings.asset`, `Packages/manifest.json` | 4-scene pipeline configured in Build Settings, Unity 6 URP. |
-| **Stage 1: Running** | ✅ Complete | [`RunnerController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Run/RunnerController.cs) | Auto-run, lateral/lane steering, jumping, obstacle slowdown, gold coin collection. |
-| **Stage 2: Swimming** | ✅ Complete | [`SwimmerController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Swim/SwimmerController.cs), [`SwimTransitionManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Swim/SwimTransitionManager.cs) | Rhythm stroke bar, oxygen drain/glide regen, exhaustion recovery, canal boundary clamp. |
-| **Stage 3: Cycling** | ✅ Complete | [`CyclingCadenceController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Cycle/CyclingCadenceController.cs) | Alternating cadence pedaling, anti-cheese, uphill stand / downhill tuck postures, rhythm burst. |
-| **Cross-Stage Stamina** | ✅ Complete | [`GameManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/GameManager.cs), [`TransitionManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/TransitionManager.cs) | Persistent `DontDestroyOnLoad` singleton carrying stamina, stage splits, and transitions. |
-| **Global Scoring System** | ✅ Complete | [`GameManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/GameManager.cs), [`ResultUIController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/ResultUIController.cs) | Formula: `TotalScore = Σ(Distances) + (Coins × 10) + Bonuses`. |
-| **UI & UX Navigation** | ✅ Complete | [`MainMenuController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/MainMenuController.cs), [`ResultUIController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/ResultUIController.cs) | Main Menu, dynamic in-game stage HUDs, Post-race Victory/Defeat screen vs AI benchmark. |
-| **Dual-Platform Controls** | ✅ Complete | `RunnerController.cs`, `SwimmerController.cs`, `CyclingCadenceController.cs` | Full support for PC (Keyboard/Mouse) and Android (Touch zones & On-screen GUI buttons). |
-| **Bugs & Edge Cases Handled** | ✅ Complete | `RunSceneBootstrap.cs`, `Coin.cs`, `Obstacle.cs` | Striped road collider fixes, coin scale normalization, proximity guards, anti-cheese. |
-
----
-
-## 🛠️ Setup & Installation
+## Setup & Installation
 
 ### System & Engine Requirements
 - **Unity Version:** `Unity 6000.3.21f1` (Unity 6 LTS)
@@ -62,7 +47,7 @@ flowchart LR
 
 ---
 
-## 🎮 Controls Reference
+## Controls Reference
 
 The game features comprehensive input handling for both **Desktop (PC / Standalone)** and **Mobile (Android Touch)**:
 
@@ -99,7 +84,7 @@ The game features comprehensive input handling for both **Desktop (PC / Standalo
 
 ---
 
-## 🧠 Game Logic & Implementation Details
+## Game Logic & Implementation Details
 
 ### 1. Architecture Overview
 The project employs a decoupled, modular architecture orchestrated by persistent managers:
@@ -189,7 +174,7 @@ Upon completing the cycling stage, players arrive at the post-race summary in `U
 
 ---
 
-## 📱 Device & Platform Specifications
+## Device & Platform Specifications
 
 | Specification | Target Configuration |
 | :--- | :--- |
@@ -203,7 +188,7 @@ Upon completing the cycling stage, players arrive at the post-race summary in `U
 
 ---
 
-## 🐛 Bug Fixes, Optimizations & Edge Cases Handled
+## Bug Fixes, Optimizations & Edge Cases Handled
 
 During development and QA testing, the following technical issues were identified and resolved in code:
 
@@ -231,50 +216,6 @@ During development and QA testing, the following technical issues were identifie
 
 ---
 
-## 📁 Repository Directory Structure
-
-```text
-Triathlon_Game/
-├── Assets/
-│   ├── Animations/               # Character animations (run, jump, swim, pedal)
-│   ├── BicycleSystem/            # Bike physics, rigs, and rider models
-│   ├── CartoonTracksPack1/       # 3D road and track modular assets
-│   ├── Prefab/                   # Player, hurdle, obstacle, and coin prefabs
-│   ├── Resources/                # Runtime loadable assets
-│   ├── Scenes/
-│   │   ├── UIScene.unity         # Scene 0: Main Menu & Result UI
-│   │   ├── Run_Scene.unity       # Scene 1: Running Stage
-│   │   ├── Swim_Scene.unity      # Scene 2: Swimming Stage
-│   │   └── Cycle_Scene.unity     # Scene 3: Cycling Stage
-│   ├── Scripts/
-│   │   ├── GameManager.cs        # Persistent cross-stage state & scoring
-│   │   ├── TransitionManager.cs  # Asynchronous screen fade transitions
-│   │   ├── FinishTrigger.cs      # Finish line triggers
-│   │   ├── Run/
-│   │   │   ├── RunnerController.cs      # Endless runner locomotion & physics
-│   │   │   ├── Obstacle.cs              # Hurdle hit logic & speed penalty
-│   │   │   ├── Coin.cs                  # Collectible coin rotation & scoring
-│   │   │   └── RunSceneBootstrap.cs     # Track collider initialization
-│   │   ├── Swim/
-│   │   │   ├── SwimmerController.cs     # Rhythm stroke, oxygen, streak logic
-│   │   │   ├── SwimTransitionManager.cs # Dock entry/exit player swapper
-│   │   │   └── RunSwimController.cs     # Dock jogging locomotion
-│   │   ├── Cycle/
-│   │   │   ├── CycleController.cs       # Base cycling locomotion
-│   │   │   └── CyclingCadenceController.cs # Cadence, rhythm burst, postures
-│   │   └── UI/
-│   │       ├── MainMenuController.cs    # Menu button navigation
-│   │       └── ResultUIController.cs    # Post-race splits & score screen
-│   └── Settings/                 # URP Graphics and Quality profiles
-├── Packages/
-│   └── manifest.json             # Unity package dependencies (URP, Input System)
-├── ProjectSettings/
-│   ├── EditorBuildSettings.asset # Scene build order
-│   └── ProjectVersion.txt        # Unity 6000.3.21f1 declaration
-└── README.md                     # Documentation for assignment grading
-```
-
----
 
 ## 🏆 Summary for Evaluators
 
