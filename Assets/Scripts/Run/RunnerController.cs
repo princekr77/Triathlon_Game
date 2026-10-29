@@ -149,6 +149,19 @@ public class RunnerController : MonoBehaviour
     private bool isRunningActive = true;
     private bool stageCompleted = false;
 
+    [Header("Obstacle Hit Settings")]
+    [Tooltip("Speed multiplier applied when hitting an obstacle (GDD specifies 0.5 = 50% speed).")]
+    public float obstacleSlowMultiplier = 0.5f;
+
+    [Tooltip("Duration in seconds for which obstacle slow down lasts before ramping back.")]
+    public float obstacleSlowDuration = 1.0f;
+
+    [Tooltip("Recovery rate when ramping back to normal runSpeed.")]
+    public float obstacleRecoveryRate = 8.0f;
+
+    private float obstacleSlowTimer = 0.0f;
+    private bool isSlowedByObstacle = false;
+
     // Distance & Score (GDD 3.2)
     private float stageDistance = 0.0f;
     private float stageTime = 0.0f;
@@ -415,8 +428,21 @@ public class RunnerController : MonoBehaviour
 
         stageTime += Time.deltaTime;
 
-        // 1. Gently ramp speed over time (if speedRampRate > 0)
-        if (speedRampRate > 0f && currentSpeed < maxRunSpeed)
+        // 1. Handle obstacle slow penalty or gentle speed ramping
+        if (isSlowedByObstacle)
+        {
+            obstacleSlowTimer -= Time.deltaTime;
+            if (obstacleSlowTimer <= 0f)
+            {
+                currentSpeed = Mathf.MoveTowards(currentSpeed, runSpeed, obstacleRecoveryRate * Time.deltaTime);
+                if (Mathf.Abs(currentSpeed - runSpeed) < 0.05f)
+                {
+                    currentSpeed = runSpeed;
+                    isSlowedByObstacle = false;
+                }
+            }
+        }
+        else if (speedRampRate > 0f && currentSpeed < maxRunSpeed)
         {
             currentSpeed = Mathf.Min(currentSpeed + speedRampRate * Time.deltaTime, maxRunSpeed);
         }
@@ -880,6 +906,51 @@ public class RunnerController : MonoBehaviour
     public bool IsGrounded => isGrounded;
     public int CurrentLane => currentLane;
     public bool StageCompleted => stageCompleted;
+
+    /// <summary>
+    /// Implements GDD §3.1: on obstacle hit: currentSpeed *= 0.5f for 1.0s, then ramp back to runSpeed
+    /// </summary>
+    public void OnObstacleHit(float duration = 1.0f, float multiplier = 0.5f)
+    {
+        if (stageCompleted || !isRunningActive) return;
+
+        currentSpeed = Mathf.Max(runSpeed * multiplier, 2.5f);
+        obstacleSlowTimer = duration;
+        isSlowedByObstacle = true;
+        Debug.Log($"[RunnerController] Hit obstacle! Current speed halved to {currentSpeed:F1} m/s for {duration:F1}s");
+    }
+
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (hit.gameObject.CompareTag("obstacle") || hit.gameObject.GetComponentInParent<Obstacle>() != null)
+        {
+            var obs = hit.gameObject.GetComponentInParent<Obstacle>();
+            if (obs != null)
+            {
+                obs.TriggerObstacle(this);
+            }
+            else
+            {
+                OnObstacleHit(obstacleSlowDuration, obstacleSlowMultiplier);
+            }
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("obstacle") || other.GetComponentInParent<Obstacle>() != null)
+        {
+            var obs = other.GetComponentInParent<Obstacle>();
+            if (obs != null)
+            {
+                obs.TriggerObstacle(this);
+            }
+            else
+            {
+                OnObstacleHit(obstacleSlowDuration, obstacleSlowMultiplier);
+            }
+        }
+    }
 
     private void OnGUI()
     {
