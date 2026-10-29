@@ -3,7 +3,8 @@ using UnityEngine;
 /// <summary>
 /// Collectible coin in the Run stage.
 /// Rotates smoothly on the vertical axis, detects runner collection,
-/// awards points and coins via RunnerController and GameManager.
+/// validates physical proximity to prevent collecting from far away,
+/// and awards points and coins via RunnerController and GameManager.
 /// </summary>
 public class Coin : MonoBehaviour
 {
@@ -21,12 +22,28 @@ public class Coin : MonoBehaviour
     [Tooltip("Gentle floating bob height amplitude.")]
     public float bobHeight = 0.08f;
 
+    [Header("Collection Proximity Guard")]
+    [Tooltip("Maximum horizontal distance (meters) between runner and coin to trigger collection. Prevents collecting coins from adjacent lanes or from far away.")]
+    public float maxHorizontalCollectionDistance = 1.6f;
+
+    [Tooltip("Maximum vertical distance (meters) between runner torso and coin.")]
+    public float maxVerticalCollectionDistance = 2.2f;
+
     [Header("Audio Feedback")]
     [Tooltip("Optional sound effect played when coin is collected.")]
     public AudioClip collectSound;
 
     private bool isCollected = false;
     private float initialY;
+
+    private void Awake()
+    {
+        // Safety guard: if an instance scale was accidentally inflated (e.g. 100), normalize it
+        if (transform.localScale.x > 3.0f || transform.localScale.z > 3.0f)
+        {
+            transform.localScale = Vector3.one;
+        }
+    }
 
     private void Start()
     {
@@ -50,6 +67,16 @@ public class Coin : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        TryCollectFromCollider(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        TryCollectFromCollider(other);
+    }
+
+    private void TryCollectFromCollider(Collider other)
+    {
         if (isCollected) return;
 
         RunnerController runner = other.GetComponentInParent<RunnerController>();
@@ -60,7 +87,19 @@ public class Coin : MonoBehaviour
 
         if (runner != null)
         {
-            Collect(runner);
+            // Verify runner is physically close enough to this coin
+            Vector3 runnerPos = runner.transform.position;
+            float horizontalDist = Vector2.Distance(
+                new Vector2(transform.position.x, transform.position.z),
+                new Vector2(runnerPos.x, runnerPos.z));
+
+            // Runner height is ~1.8m; torso/center is at runnerPos.y + 0.9m
+            float verticalDist = Mathf.Abs(transform.position.y - (runnerPos.y + 0.9f));
+
+            if (horizontalDist <= maxHorizontalCollectionDistance && verticalDist <= maxVerticalCollectionDistance)
+            {
+                Collect(runner);
+            }
         }
     }
 

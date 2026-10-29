@@ -2687,7 +2687,7 @@ MonoBehaviour:
   fallMultiplier: 1.2
   groundedStickForce: -2
   runDistance: 500
-  nextSceneName: Cycle_Scene
+  nextSceneName: Swim_Scene
   animator: {fileID: 2757063978594661432}
   isRunningParam: isRunning
   isGroundedParam: isGrounded

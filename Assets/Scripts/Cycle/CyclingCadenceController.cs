@@ -784,11 +784,9 @@ public class CyclingCadenceController : CycleController
             // 2. Total Time = Swim + Cycle + Run
             GameManager.I.totalTime = GameManager.I.swimTime + GameManager.I.cycleTime + GameManager.I.runTime;
 
-            // 3. Stage Score: distance (1000 pts) + remaining stamina bonus + time bonus
-            float timeBonus = Mathf.Max(0f, (150f - elapsedStageTime) * 10f);
-            float staminaBonus = stamina * 10f;
-            float stageScore = targetDistance + staminaBonus + timeBonus;
-            GameManager.I.totalScore += stageScore;
+            // 3. Stage Distance & Global Score System (Section 6.1)
+            GameManager.I.cycleDistance = targetDistance;
+            GameManager.I.CalculateTotalScore();
 
             // 4. Carry over final stamina
             GameManager.I.stamina = stamina;

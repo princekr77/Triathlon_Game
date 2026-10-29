@@ -225,12 +225,19 @@ public class RunCoinArranger : EditorWindow
         }
 
         // Parent container for clean scene hierarchy
-        GameObject coinParent = GameObject.Find("Coins_Group");
+        GameObject coinParent = GameObject.Find("Coins");
+        if (coinParent == null)
+            coinParent = GameObject.Find("Coins_Group");
         if (coinParent == null)
         {
-            coinParent = new GameObject("Coins_Group");
+            coinParent = new GameObject("Coins");
             Undo.RegisterCreatedObjectUndo(coinParent, "Create Coins Group");
         }
+
+        // Parent must be at origin so child coordinates are exact world coordinates
+        coinParent.transform.position = Vector3.zero;
+        coinParent.transform.rotation = Quaternion.identity;
+        coinParent.transform.localScale = Vector3.one;
 
         foreach (var item in coinPositions)
         {
@@ -240,7 +247,8 @@ public class RunCoinArranger : EditorWindow
                 instance.name = item.name;
                 instance.transform.position = item.pos;
                 instance.transform.rotation = Quaternion.identity;
-                instance.transform.SetParent(coinParent.transform);
+                instance.transform.localScale = Vector3.one;
+                instance.transform.SetParent(coinParent.transform, true);
                 Undo.RegisterCreatedObjectUndo(instance, "Generate Run Coin");
             }
         }

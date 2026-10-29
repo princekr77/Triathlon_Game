@@ -659,9 +659,10 @@ public class SwimmerController : MonoBehaviour
 
         if (GameManager.I != null)
         {
-            GameManager.I.totalScore = stageDistance;
+            GameManager.I.swimDistance = stageDistance;
             GameManager.I.totalTime += Time.deltaTime;
             GameManager.I.swimTime = stageTime;
+            GameManager.I.CalculateTotalScore();
         }
 
         // Check if finished by target distance or reached canal end
@@ -693,6 +694,8 @@ public class SwimmerController : MonoBehaviour
             GameManager.I.stamina = oxygen;
             GameManager.I.perfectStreak = 0; // Streak reset to 0 at transition (§4.2)
             GameManager.I.swimTime = stageTime;
+            GameManager.I.swimDistance = stageDistance;
+            GameManager.I.CalculateTotalScore();
         }
 
         if (TransitionManager.Instance != null)

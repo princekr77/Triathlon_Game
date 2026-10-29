@@ -7,7 +7,7 @@ public class FinishTrigger : MonoBehaviour
     public string playerTag = "Player";
 
     [Tooltip("Next scene to load when crossing the finish line.")]
-    public string nextScene = "UIScene";
+    public string nextScene = "Swim_Scene";
 
     private bool triggered = false;
 

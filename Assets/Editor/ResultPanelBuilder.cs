@@ -14,9 +14,9 @@ public class ResultPanelBuilder
 
     private static void AutoBuildOnce()
     {
-        if (!SessionState.GetBool("ResultPanelAutoBuilt_v4_perf", false))
+        if (!SessionState.GetBool("ResultPanelAutoBuilt_v5_global_score", false))
         {
-            SessionState.SetBool("ResultPanelAutoBuilt_v4_perf", true);
+            SessionState.SetBool("ResultPanelAutoBuilt_v5_global_score", true);
             BuildResultPanelUI();
         }
     }
@@ -33,7 +33,7 @@ public class ResultPanelBuilder
             currentScene = EditorSceneManager.OpenScene(scenePath);
         }
 
-        // 1. Locate or create Canvas
+        // 1. Locate Canvas
         Canvas canvas = null;
         GameObject canvasGO = GameObject.Find("Canvas");
         if (canvasGO != null) canvas = canvasGO.GetComponent<Canvas>();
@@ -54,6 +54,10 @@ public class ResultPanelBuilder
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
         }
+
+        // Locate MenuPanel under Canvas
+        Transform menuPanelTransform = canvas.transform.Find("MenuPanel");
+        GameObject menuPanelGO = (menuPanelTransform != null) ? menuPanelTransform.gameObject : null;
 
         // 2. Locate or create ResultPanel under Canvas
         Transform resultPanelTransform = canvas.transform.Find("ResultPanel");
@@ -105,6 +109,10 @@ public class ResultPanelBuilder
         {
             controller = resultPanelGO.AddComponent<ResultUIController>();
         }
+
+        // Assign panel navigation
+        controller.resultPanel = resultPanelGO;
+        controller.menuPanel = menuPanelGO;
 
         // ==========================================
         // 1. TOP HEADER SECTION (Outcome & Title)
@@ -184,107 +192,147 @@ public class ResultPanelBuilder
         controller.timeDiffText = timeDiff;
 
         // ==========================================
-        // 3. TWO CARDS: STAGE SPLITS & PERFORMANCE SUMMARY
+        // 3. TWO CARDS: STAGE BREAKDOWN & PERFORMANCE SUMMARY
         // ==========================================
         float cardY = -35f;
         float cardW = 660f;
         float cardH = 370f;
 
-        // --- LEFT CARD: STAGE SPLITS ---
+        // --- LEFT CARD: STAGE BREAKDOWN ---
         GameObject leftCard = CreateCard("LeftCard_StageSplits", panelRT, new Vector2(-350, cardY), new Vector2(cardW, cardH));
         RectTransform leftCardRT = leftCard.GetComponent<RectTransform>();
 
         // Header Title
-        var splitsTitle = CreateTMP("Title", leftCardRT, ">  STAGE SPLITS", font, 20, new Color(0.1f, 0.9f, 1f, 1f), TextAlignmentOptions.Left, true, false);
-        SetAnchors(splitsTitle.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -25), new Vector2(300, 30));
+        var splitsTitle = CreateTMP("Title", leftCardRT, ">  STAGE BREAKDOWN", font, 20, new Color(0.1f, 0.9f, 1f, 1f), TextAlignmentOptions.Left, true, false);
+        SetAnchors(splitsTitle.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -22), new Vector2(300, 26));
+
+        // Sub-column header labels
+        var distColHeader = CreateTMP("DistHeader", leftCardRT, "DISTANCE", font, 12, new Color(0.45f, 0.65f, 0.8f, 1f), TextAlignmentOptions.Center, true, false);
+        SetAnchors(distColHeader.rectTransform, new Vector2(0.55f, 1), new Vector2(0.55f, 1), new Vector2(0.5f, 1), new Vector2(0, -26), new Vector2(120, 20));
+
+        var timeColHeader = CreateTMP("TimeHeader", leftCardRT, "STAGE TIME", font, 12, new Color(0.45f, 0.65f, 0.8f, 1f), TextAlignmentOptions.Right, true, false);
+        SetAnchors(timeColHeader.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-45, -26), new Vector2(140, 20));
 
         GameObject splitsLine = CreateImage("Separator", leftCardRT, new Color(0.12f, 0.28f, 0.48f, 0.7f));
-        SetAnchors(splitsLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -58), new Vector2(580, 2));
+        SetAnchors(splitsLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -56), new Vector2(580, 2));
 
         // Swim Row
-        controller.swimTimeText = CreateSplitRow(leftCardRT, "SwimRow", "SWIM", "00:48.32", font, new Color(0f, 0.9f, 1f, 1f), -105f);
+        TextMeshProUGUI sTime, sDist;
+        CreateBreakdownRow(leftCardRT, "SwimRow", "SWIM", "300m", "00:48.32", font, new Color(0f, 0.9f, 1f, 1f), -102f, out sDist, out sTime);
+        controller.swimTimeText = sTime;
+        controller.swimDistanceText = sDist;
 
         // Cycle Row
-        controller.cycleTimeText = CreateSplitRow(leftCardRT, "CycleRow", "CYCLE", "01:52.11", font, new Color(1f, 0.6f, 0f, 1f), -165f);
+        TextMeshProUGUI cTime, cDist;
+        CreateBreakdownRow(leftCardRT, "CycleRow", "CYCLE", "1,000m", "01:52.11", font, new Color(1f, 0.6f, 0f, 1f), -162f, out cDist, out cTime);
+        controller.cycleTimeText = cTime;
+        controller.cycleDistanceText = cDist;
 
         // Run Row
-        controller.runTimeText = CreateSplitRow(leftCardRT, "RunRow", "RUN", "01:52.07", font, new Color(1f, 0.15f, 0.25f, 1f), -225f);
+        TextMeshProUGUI rTime, rDist;
+        CreateBreakdownRow(leftCardRT, "RunRow", "RUN", "500m", "01:52.07", font, new Color(1f, 0.15f, 0.25f, 1f), -222f, out rDist, out rTime);
+        controller.runTimeText = rTime;
+        controller.runDistanceText = rDist;
 
         // Footer separator
         GameObject splitsFooterLine = CreateImage("FooterSeparator", leftCardRT, new Color(0.12f, 0.28f, 0.48f, 0.4f));
         SetAnchors(splitsFooterLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -280), new Vector2(580, 1));
 
         // Splits Footer
-        var splitsFooterLabel = CreateTMP("SplitsFooterLabel", leftCardRT, "TOTAL STAGE TIME", font, 15, new Color(0.55f, 0.65f, 0.7f, 1f), TextAlignmentOptions.Left, false, false);
-        SetAnchors(splitsFooterLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(55, -315), new Vector2(240, 30));
+        var splitsFooterLabel = CreateTMP("SplitsFooterLabel", leftCardRT, "TOTAL (3 STAGES)", font, 15, new Color(0.55f, 0.65f, 0.7f, 1f), TextAlignmentOptions.Left, true, false);
+        SetAnchors(splitsFooterLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(45, -315), new Vector2(200, 30));
+
+        var splitsDistFooter = CreateTMP("SplitsDistFooter", leftCardRT, "1,800m", font, 18, new Color(0.3f, 0.85f, 1f, 1f), TextAlignmentOptions.Center, true, false);
+        SetAnchors(splitsDistFooter.rectTransform, new Vector2(0.55f, 1), new Vector2(0.55f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -315), new Vector2(130, 30));
+        controller.stageDistanceFooterText = splitsDistFooter;
 
         var splitsFooterVal = CreateTMP("SplitsFooterValue", leftCardRT, "04:32.50", font, 20, new Color(0.8f, 0.9f, 1f, 1f), TextAlignmentOptions.Right, true, false);
-        SetAnchors(splitsFooterVal.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-55, -315), new Vector2(200, 30));
+        SetAnchors(splitsFooterVal.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-45, -315), new Vector2(160, 30));
         controller.stageSplitsFooterText = splitsFooterVal;
 
-        // --- RIGHT CARD: PERFORMANCE SUMMARY ---
+        // --- RIGHT CARD: PERFORMANCE & SCORE ---
         GameObject rightCard = CreateCard("RightCard_PerformanceSummary", panelRT, new Vector2(350, cardY), new Vector2(cardW, cardH));
         RectTransform rightCardRT = rightCard.GetComponent<RectTransform>();
 
         // Header Title
-        var perfTitle = CreateTMP("Title", rightCardRT, ">  PERFORMANCE SUMMARY", font, 20, new Color(0.1f, 0.9f, 1f, 1f), TextAlignmentOptions.Left, true, false);
-        SetAnchors(perfTitle.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -25), new Vector2(400, 30));
+        var perfTitle = CreateTMP("Title", rightCardRT, ">  PERFORMANCE & SCORE", font, 20, new Color(0.1f, 0.9f, 1f, 1f), TextAlignmentOptions.Left, true, false);
+        SetAnchors(perfTitle.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(40, -22), new Vector2(400, 26));
 
         GameObject perfLine = CreateImage("Separator", rightCardRT, new Color(0.12f, 0.28f, 0.48f, 0.7f));
-        SetAnchors(perfLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -58), new Vector2(580, 2));
+        SetAnchors(perfLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -56), new Vector2(580, 2));
 
         // 1. Stamina Remaining (Single percentage with progress bar)
-        var staminaLabel = CreateTMP("StaminaLabel", rightCardRT, "⚡  STAMINA REMAINING", font, 15, new Color(0.9f, 0.95f, 1f, 1f), TextAlignmentOptions.Left, true, false);
-        SetAnchors(staminaLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(45, -92), new Vector2(260, 24));
+        var staminaLabel = CreateTMP("StaminaLabel", rightCardRT, "⚡  STAMINA REMAINING", font, 14, new Color(0.9f, 0.95f, 1f, 1f), TextAlignmentOptions.Left, true, false);
+        SetAnchors(staminaLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(45, -82), new Vector2(260, 22));
 
         Image staminaFill;
-        CreateProgressBar(rightCardRT, "StaminaBar", new Vector2(-20, -122), new Vector2(380, 14), 0.68f, new Color(0f, 0.92f, 1f, 1f), out staminaFill);
+        CreateProgressBar(rightCardRT, "StaminaBar", new Vector2(-20, -108), new Vector2(380, 12), 0.68f, new Color(0f, 0.92f, 1f, 1f), out staminaFill);
         controller.staminaProgressBar = staminaFill;
 
-        var staminaPercent = CreateTMP("StaminaPercent", rightCardRT, "68%", font, 22, new Color(0f, 0.92f, 1f, 1f), TextAlignmentOptions.Right, true, false);
-        SetAnchors(staminaPercent.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-45, -122), new Vector2(80, 30));
+        var staminaPercent = CreateTMP("StaminaPercent", rightCardRT, "68%", font, 20, new Color(0f, 0.92f, 1f, 1f), TextAlignmentOptions.Right, true, false);
+        SetAnchors(staminaPercent.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-45, -108), new Vector2(80, 26));
         controller.staminaPercentText = staminaPercent;
 
-        // 2. Total Score
-        GameObject scoreRow = CreateEmpty("ScoreRow", rightCardRT);
-        RectTransform scoreRT = scoreRow.GetComponent<RectTransform>();
-        SetAnchors(scoreRT, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -172), new Vector2(580, 40));
+        // 2. Stage Distance Points
+        GameObject distRow = CreateEmpty("DistanceRow", rightCardRT);
+        RectTransform distRT = distRow.GetComponent<RectTransform>();
+        SetAnchors(distRT, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -145), new Vector2(580, 32));
 
-        GameObject scorePill = CreateImage("Pill", scoreRT, new Color(0f, 0.85f, 1f, 1f));
-        SetAnchors(scorePill.GetComponent<RectTransform>(), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(6, 30));
+        GameObject distPill = CreateImage("Pill", distRT, new Color(0f, 0.7f, 1f, 1f));
+        SetAnchors(distPill.GetComponent<RectTransform>(), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(5, 24));
 
-        var scoreLabel = CreateTMP("Label", scoreRT, "TOTAL SCORE", font, 18, Color.white, TextAlignmentOptions.Left, true, false);
-        SetAnchors(scoreLabel.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(30, 0), new Vector2(200, 30));
+        var distLabel = CreateTMP("Label", distRT, "STAGE DISTANCE", font, 15, Color.white, TextAlignmentOptions.Left, true, false);
+        SetAnchors(distLabel.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(28, 0), new Vector2(200, 26));
 
-        var scoreVal = CreateTMP("Value", scoreRT, "2,850 PTS", font, 24, new Color(0f, 0.96f, 1f, 1f), TextAlignmentOptions.Right, true, false);
-        SetAnchors(scoreVal.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(250, 30));
-        controller.totalScoreText = scoreVal;
+        var distVal = CreateTMP("Value", distRT, "1,800m  →  1,800 PTS", font, 18, new Color(0.7f, 0.9f, 1f, 1f), TextAlignmentOptions.Right, true, false);
+        SetAnchors(distVal.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(280, 26));
+        controller.distanceScoreText = distVal;
 
-        // 3. Coins Earned
+        // 3. Coins Earned (Reward granted)
         GameObject coinsRow = CreateEmpty("CoinsRow", rightCardRT);
         RectTransform coinsRT = coinsRow.GetComponent<RectTransform>();
-        SetAnchors(coinsRT, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -225), new Vector2(580, 40));
+        SetAnchors(coinsRT, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -188), new Vector2(580, 32));
 
         GameObject coinsPill = CreateImage("Pill", coinsRT, new Color(1f, 0.78f, 0.15f, 1f));
-        SetAnchors(coinsPill.GetComponent<RectTransform>(), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(6, 30));
+        SetAnchors(coinsPill.GetComponent<RectTransform>(), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(5, 24));
 
-        var coinsLabel = CreateTMP("Label", coinsRT, "COINS EARNED", font, 18, Color.white, TextAlignmentOptions.Left, true, false);
-        SetAnchors(coinsLabel.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(30, 0), new Vector2(200, 30));
+        var coinsLabel = CreateTMP("Label", coinsRT, "COINS EARNED", font, 15, Color.white, TextAlignmentOptions.Left, true, false);
+        SetAnchors(coinsLabel.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(28, 0), new Vector2(200, 26));
 
-        var coinsVal = CreateTMP("Value", coinsRT, "+150 COINS", font, 24, new Color(1f, 0.84f, 0.31f, 1f), TextAlignmentOptions.Right, true, false);
-        SetAnchors(coinsVal.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(250, 30));
+        var coinsVal = CreateTMP("Value", coinsRT, "+150 COINS (+1,500 PTS)", font, 18, new Color(1f, 0.84f, 0.31f, 1f), TextAlignmentOptions.Right, true, false);
+        SetAnchors(coinsVal.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(280, 26));
         controller.coinsEarnedText = coinsVal;
+
+        // 4. Total Score (Section 6.1 Formula)
+        GameObject scoreRow = CreateEmpty("ScoreRow", rightCardRT);
+        RectTransform scoreRT = scoreRow.GetComponent<RectTransform>();
+        SetAnchors(scoreRT, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -236), new Vector2(580, 42));
+
+        GameObject scorePill = CreateImage("Pill", scoreRT, new Color(0f, 0.95f, 1f, 1f));
+        SetAnchors(scorePill.GetComponent<RectTransform>(), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(6, 32));
+
+        var scoreLabel = CreateTMP("Label", scoreRT, "TOTAL SCORE", font, 18, Color.white, TextAlignmentOptions.Left, true, false);
+        SetAnchors(scoreLabel.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(28, 0), new Vector2(180, 30));
+
+        var scoreVal = CreateTMP("Value", scoreRT, "3,300 PTS", font, 26, new Color(0f, 0.96f, 1f, 1f), TextAlignmentOptions.Right, true, false);
+        SetAnchors(scoreVal.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(260, 34));
+        controller.totalScoreText = scoreVal;
+
+        // Score formula breakdown subtext
+        var scoreFormula = CreateTMP("Formula", rightCardRT, "ΣDist (1,800) + Coins (1,500) + Bonus (0)", font, 11, new Color(0.45f, 0.65f, 0.8f, 1f), TextAlignmentOptions.Right, false, true);
+        SetAnchors(scoreFormula.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-55, -264), new Vector2(400, 18));
+        controller.scoreFormulaText = scoreFormula;
 
         // Footer separator
         GameObject perfFooterLine = CreateImage("FooterSeparator", rightCardRT, new Color(0.12f, 0.28f, 0.48f, 0.4f));
         SetAnchors(perfFooterLine.GetComponent<RectTransform>(), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -280), new Vector2(580, 1));
 
         // Outcome Status footer
-        var outcomeStatusLabel = CreateTMP("OutcomeStatusLabel", rightCardRT, "RACE OUTCOME", font, 15, new Color(0.55f, 0.65f, 0.7f, 1f), TextAlignmentOptions.Left, false, false);
-        SetAnchors(outcomeStatusLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(55, -315), new Vector2(200, 30));
+        var outcomeStatusLabel = CreateTMP("OutcomeStatusLabel", rightCardRT, "RACE OUTCOME", font, 15, new Color(0.55f, 0.65f, 0.7f, 1f), TextAlignmentOptions.Left, true, false);
+        SetAnchors(outcomeStatusLabel.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(45, -315), new Vector2(200, 30));
 
         var outcomeStatusVal = CreateTMP("OutcomeStatusValue", rightCardRT, "VICTORY", font, 20, new Color(0f, 0.95f, 0.45f, 1f), TextAlignmentOptions.Right, true, false);
-        SetAnchors(outcomeStatusVal.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-55, -315), new Vector2(200, 30));
+        SetAnchors(outcomeStatusVal.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-45, -315), new Vector2(200, 30));
         controller.outcomeStatusText = outcomeStatusVal;
 
         // ==========================================
@@ -294,16 +342,16 @@ public class ResultPanelBuilder
         RectTransform bottomRT = bottomBar.GetComponent<RectTransform>();
         SetAnchors(bottomRT, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 45), new Vector2(1200, 70));
 
-        // Retry Button
-        GameObject retryBtn = CreateButtonObj("RetryButton", bottomRT, "⟳  RETRY", font, 20,
+        // Restart Button (resets game & starts race)
+        GameObject retryBtn = CreateButtonObj("RestartButton", bottomRT, "⟳  RESTART", font, 20,
             new Color(0.04f, 0.14f, 0.27f, 0.9f),
             new Color(0f, 0.7f, 1f, 0.7f),
             new Color(0.85f, 0.95f, 1f, 1f),
             new Vector2(0.5f, 0.5f), new Vector2(-380, 0), new Vector2(270, 56));
         controller.retryButton = retryBtn.GetComponent<Button>();
 
-        // Main Menu Button
-        GameObject menuBtn = CreateButtonObj("MainMenuButton", bottomRT, "⌂  MAIN MENU", font, 20,
+        // Menu Button (sets active true MenuPanel and false ResultPanel)
+        GameObject menuBtn = CreateButtonObj("MenuButton", bottomRT, "⌂  MAIN MENU", font, 20,
             new Color(0.04f, 0.14f, 0.27f, 0.9f),
             new Color(0f, 0.7f, 1f, 0.7f),
             new Color(0.85f, 0.95f, 1f, 1f),
@@ -323,7 +371,7 @@ public class ResultPanelBuilder
         EditorSceneManager.MarkSceneDirty(currentScene);
         EditorSceneManager.SaveScene(currentScene);
 
-        Debug.Log("[ResultPanelBuilder] Result Panel UI successfully rebuilt with Performance Summary!");
+        Debug.Log("[ResultPanelBuilder] Result Panel UI successfully rebuilt with Global Score System and Navigation!");
     }
 
     // ==========================================
@@ -360,7 +408,8 @@ public class ResultPanelBuilder
         return card;
     }
 
-    private static TextMeshProUGUI CreateSplitRow(Transform parent, string name, string label, string timeVal, TMP_FontAsset font, Color accentColor, float yPos)
+    private static void CreateBreakdownRow(Transform parent, string name, string label, string distVal, string timeVal,
+        TMP_FontAsset font, Color accentColor, float yPos, out TextMeshProUGUI outDist, out TextMeshProUGUI outTime)
     {
         GameObject row = CreateEmpty(name, parent);
         RectTransform rowRT = row.GetComponent<RectTransform>();
@@ -369,17 +418,19 @@ public class ResultPanelBuilder
         // Accent pill bar
         GameObject pill = CreateImage("AccentPill", rowRT, accentColor);
         RectTransform pillRT = pill.GetComponent<RectTransform>();
-        SetAnchors(pillRT, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(6, 34));
+        SetAnchors(pillRT, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(5, 32));
 
         // Discipline Label
-        var lbl = CreateTMP("Label", rowRT, label, font, 22, Color.white, TextAlignmentOptions.Left, true, false);
-        SetAnchors(lbl.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(35, 0), new Vector2(180, 36));
+        var lbl = CreateTMP("Label", rowRT, label, font, 20, Color.white, TextAlignmentOptions.Left, true, false);
+        SetAnchors(lbl.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(28, 0), new Vector2(140, 32));
+
+        // Distance Value
+        outDist = CreateTMP("Distance", rowRT, distVal, font, 18, new Color(0.7f, 0.85f, 0.95f, 1f), TextAlignmentOptions.Center, true, false);
+        SetAnchors(outDist.rectTransform, new Vector2(0.55f, 0.5f), new Vector2(0.55f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(130, 32));
 
         // Time Value
-        var val = CreateTMP("Time", rowRT, timeVal, font, 24, Color.white, TextAlignmentOptions.Right, true, false);
-        SetAnchors(val.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(220, 36));
-
-        return val;
+        outTime = CreateTMP("Time", rowRT, timeVal, font, 22, Color.white, TextAlignmentOptions.Right, true, false);
+        SetAnchors(outTime.rectTransform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-10, 0), new Vector2(160, 32));
     }
 
     private static void CreateProgressBar(Transform parent, string name, Vector2 pos, Vector2 size, float fillAmount, Color fillColor, out Image fillImage)

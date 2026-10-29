@@ -14,7 +14,7 @@ using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 ///   * Auto-run: Moves forward automatically at runSpeed (constant or gently ramping). No stamina, no regen, no exhaustion.
 ///   * Steering: A/D, Left/Right arrows, InputSystem_Actions, or Android touch swipe in the Left Zone.
 ///   * Jump: Space, Up arrow, InputSystem_Actions, or Android touch tap in the Right Zone.
-///   * Finish: When stageDistance >= runDistance, completes stage and loads Cycle_Scene.
+///   * Finish: When stageDistance >= runDistance, completes stage and loads Swim_Scene.
 /// - 3.2 Scoring:
 ///   * stageScore = stageDistance (in meters). No bonuses.
 /// - 3.3 HUD:
@@ -84,7 +84,7 @@ public class RunnerController : MonoBehaviour
     public float runDistance = 500.0f;
 
     [Tooltip("Name of the next scene to load upon stage completion.")]
-    public string nextSceneName = "Cycle_Scene";
+    public string nextSceneName = "Swim_Scene";
 
     [Header("Animation Parameters (Player_Controller)")]
     [Tooltip("Reference to the Animator component (uses Player_Controller).")]
@@ -984,7 +984,7 @@ public class RunnerController : MonoBehaviour
     /// <summary>
     /// Completes the running stage (GDD 3.1 & 3.2):
     /// - Records stageScore = stageDistance in meters + coinsCollected * coinValue.
-    /// - Transitions to Cycle_Scene.
+    /// - Transitions to Swim_Scene.
     /// </summary>
     public void CompleteStage()
     {
@@ -993,18 +993,20 @@ public class RunnerController : MonoBehaviour
 
         StopRunning();
 
-        // 3.2 What Counts Toward Score: stageScore = stageDistance (in meters) + coinsCollected * coinValue. No bonuses.
+        // Section 6.1: stageScore = stageDistance (in meters) + coinsCollected * coinValue. Bonuses slot reserved.
         stageScore = (int)stageDistance + (coinsCollected * coinValue);
         if (GameManager.I != null)
         {
             GameManager.I.coinsCollected = coinsCollected;
-            GameManager.I.totalScore = stageScore;
+            GameManager.I.runDistance = stageDistance;
+            GameManager.I.runTime = stageTime;
             GameManager.I.totalTime += stageTime;
+            GameManager.I.CalculateTotalScore();
         }
 
         Debug.Log($"[Running Complete] Stage finished! Distance: {stageDistance:F1}m, Time: {stageTime:F1}s, Score: {stageScore:F0}. Transitioning to: {nextSceneName}");
 
-        // Transition to Cycle_Scene
+        // Transition to Swim_Scene
         if (TransitionManager.Instance != null)
         {
             TransitionManager.Instance.BeginTransition(
@@ -1050,7 +1052,8 @@ public class RunnerController : MonoBehaviour
         if (GameManager.I != null)
         {
             GameManager.I.coinsCollected = coinsCollected;
-            GameManager.I.totalScore = stageScore;
+            GameManager.I.runDistance = stageDistance;
+            GameManager.I.CalculateTotalScore();
         }
 
         Debug.Log($"[RunnerController] Coin collected! Total Coins: {coinsCollected}, Score: {stageScore}");
@@ -1244,7 +1247,7 @@ public class RunnerController : MonoBehaviour
                 alignment = TextAnchor.MiddleCenter
             };
             subStyle.normal.textColor = Color.white;
-            GUI.Label(new Rect(0, screenH * 0.35f + 55, screenW, 40), "Entering Cycle Stage...", subStyle);
+            GUI.Label(new Rect(0, screenH * 0.35f + 55, screenW, 40), "Entering Swim Stage...", subStyle);
         }
 
         // Android Touch Controls layout indicators
