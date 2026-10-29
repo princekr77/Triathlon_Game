@@ -167,6 +167,12 @@ public class RunnerController : MonoBehaviour
     private float stageTime = 0.0f;
     private Vector3 lastPosition;
 
+    [Header("Coin & Scoring Settings (GDD §3.1 & 3.2)")]
+    [Tooltip("Point value added to stageScore when collected (default 10).")]
+    public int coinValue = 10;
+    private int coinsCollected = 0;
+    private int stageScore = 0;
+
     // Lateral steering state
     private float lateralOffset = 0.0f;
     private int currentLane = 0; // -2, -1, 0, 1, 2
@@ -906,6 +912,29 @@ public class RunnerController : MonoBehaviour
     public bool IsGrounded => isGrounded;
     public int CurrentLane => currentLane;
     public bool StageCompleted => stageCompleted;
+    public int CoinsCollected => coinsCollected;
+    public int StageScore => (int)stageDistance + (coinsCollected * coinValue);
+
+    /// <summary>
+    /// Implements GDD §3.1 & 3.2: On trigger -> coinsCollected += 1, totalScore += coinValue
+    /// stageScore = stageDistance (in meters) + coinsCollected * coinValue
+    /// </summary>
+    public void CollectCoin(int value = 0)
+    {
+        if (stageCompleted) return;
+
+        coinsCollected++;
+        int val = (value > 0) ? value : coinValue;
+        stageScore = (int)stageDistance + (coinsCollected * val);
+
+        if (GameManager.I != null)
+        {
+            GameManager.I.coinsCollected = coinsCollected;
+            GameManager.I.totalScore = stageScore;
+        }
+
+        Debug.Log($"[RunnerController] Coin collected! Total Coins: {coinsCollected}, Score: {stageScore}");
+    }
 
     /// <summary>
     /// Implements GDD §3.1: on obstacle hit: currentSpeed *= 0.5f for 1.0s, then ramp back to runSpeed
@@ -995,6 +1024,26 @@ public class RunnerController : MonoBehaviour
         };
         speedStyle.normal.textColor = new Color(0.9f, 0.9f, 0.9f, 0.85f);
         GUI.Label(new Rect(30, 82, 300, 30), $"Speed: {currentSpeed:F1} m/s", speedStyle);
+
+        // 3.3 HUD: Coins (count) & Stage Score
+        GUIStyle coinStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = Mathf.Clamp(Screen.height / 32, 15, 22),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperRight
+        };
+        coinStyle.normal.textColor = new Color(1.0f, 0.84f, 0.0f, 1.0f);
+        GUI.Label(new Rect(screenW - 250, 25, 220, 35), $"★ COINS: {coinsCollected}", coinStyle);
+
+        GUIStyle scoreStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = Mathf.Clamp(Screen.height / 38, 13, 18),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperRight
+        };
+        scoreStyle.normal.textColor = new Color(0.9f, 0.95f, 1.0f, 0.9f);
+        int currentScore = (int)stageDistance + (coinsCollected * coinValue);
+        GUI.Label(new Rect(screenW - 250, 55, 220, 30), $"SCORE: {currentScore}", scoreStyle);
 
         // Race Countdown Display (3, 2, 1, GO!)
         if (isCountingDown || !string.IsNullOrEmpty(countdownDisplay))
