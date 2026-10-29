@@ -1,26 +1,11 @@
-# 🏃‍♂️🚴‍♂️🏊‍♂️ Triathlon 3D (Triathlon Game)
+# Triathlon 3D (Triathlon Game)
 
 A complete, multi-stage 3D triathlon sports simulation game developed in **Unity 6 (6000.3.21f1)** using the **Universal Render Pipeline (URP)**. Players compete across three distinct sporting disciplines—**Running**, **Swimming**, and **Cycling**—managing cross-stage stamina, rhythm timing, cadence pacing, and obstacle navigation to beat benchmark AI times and set high scores.
 
 ---
 
-## 📋 Assignment Submission Checklist
 
-| Requirement / Component | Implementation Status | Key Script / Asset Reference | Description |
-| :--- | :---: | :--- | :--- |
-| **Setup & Build Pipeline** | ✅ Complete | `EditorBuildSettings.asset`, `Packages/manifest.json` | 4-scene pipeline configured in Build Settings, Unity 6 URP. |
-| **Stage 1: Running** | ✅ Complete | [`RunnerController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Run/RunnerController.cs) | Auto-run, lateral/lane steering, jumping, obstacle slowdown, gold coin collection. |
-| **Stage 2: Swimming** | ✅ Complete | [`SwimmerController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Swim/SwimmerController.cs), [`SwimTransitionManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Swim/SwimTransitionManager.cs) | Rhythm stroke bar, oxygen drain/glide regen, exhaustion recovery, canal boundary clamp. |
-| **Stage 3: Cycling** | ✅ Complete | [`CyclingCadenceController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/Cycle/CyclingCadenceController.cs) | Alternating cadence pedaling, anti-cheese, uphill stand / downhill tuck postures, rhythm burst. |
-| **Cross-Stage Stamina** | ✅ Complete | [`GameManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/GameManager.cs), [`TransitionManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/TransitionManager.cs) | Persistent `DontDestroyOnLoad` singleton carrying stamina, stage splits, and transitions. |
-| **Global Scoring System** | ✅ Complete | [`GameManager.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/GameManager.cs), [`ResultUIController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/ResultUIController.cs) | Formula: `TotalScore = Σ(Distances) + (Coins × 10) + Bonuses`. |
-| **UI & UX Navigation** | ✅ Complete | [`MainMenuController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/MainMenuController.cs), [`ResultUIController.cs`](file:///d:/Unity/Triathlon_Game/Assets/Scripts/UI/ResultUIController.cs) | Main Menu, dynamic in-game stage HUDs, Post-race Victory/Defeat screen vs AI benchmark. |
-| **Dual-Platform Controls** | ✅ Complete | `RunnerController.cs`, `SwimmerController.cs`, `CyclingCadenceController.cs` | Full support for PC (Keyboard/Mouse) and Android (Touch zones & On-screen GUI buttons). |
-| **Bugs & Edge Cases Handled** | ✅ Complete | `RunSceneBootstrap.cs`, `Coin.cs`, `Obstacle.cs` | Striped road collider fixes, coin scale normalization, proximity guards, anti-cheese. |
-
----
-
-## 🛠️ Setup & Installation
+## Setup & Installation
 
 ### System & Engine Requirements
 - **Unity Version:** `Unity 6000.3.21f1` (Unity 6 LTS)
@@ -39,30 +24,11 @@ A complete, multi-stage 3D triathlon sports simulation game developed in **Unity
 7. Click the **Play** button in the Unity Editor toolbar.
 8. Click **Start Race** on the Main Menu to begin the full triathlon sequence.
 
-### Scene Execution Order (Build Settings)
-The game is structured across 4 sequential scenes registered in `EditorBuildSettings.asset`:
-
-```mermaid
-flowchart LR
-    A["0: UIScene\n(Main Menu)"] -->|"Start Race"| B["1: Run_Scene\n(Endless Runner)"]
-    B -->|"Cross 500m Finish"| C["2: Swim_Scene\n(Canal Swimming)"]
-    C -->|"Exit Canal Dock"| D["3: Cycle_Scene\n(Road Cycling)"]
-    D -->|"Cross 1000m Finish"| E["0: UIScene\n(Result Screen)"]
-    E -->|"Restart / Menu"| A
-```
-
-| Build Index | Scene Path | Description |
-| :---: | :--- | :--- |
-| **0** | `Assets/Scenes/UIScene.unity` | Main Menu (Start, How to Play, Audio) & Final Result / Leaderboard Screen. |
-| **1** | `Assets/Scenes/Run_Scene.unity` | Stage 1: Running track with hurdles, stopboards, and collectible gold coins. |
-| **2** | `Assets/Scenes/Swim_Scene.unity` | Stage 2: Water canal rhythm swimming, oxygen management, dock entry/exit. |
-| **3** | `Assets/Scenes/Cycle_Scene.unity` | Stage 3: High-speed road cycling with cadence pacing and uphill/downhill postures. |
-
-> **Note for Evaluators:** Each stage scene contains fallback bootstrap defaults, allowing individual scenes (`Run_Scene`, `Swim_Scene`, `Cycle_Scene`) to be played directly from the editor for standalone testing.
 
 ---
 
-## 🎮 Controls Reference
+
+## Controls Reference
 
 The game features comprehensive input handling for both **Desktop (PC / Standalone)** and **Mobile (Android Touch)**:
 
@@ -90,8 +56,6 @@ The game features comprehensive input handling for both **Desktop (PC / Standalo
 | **Left Pedal** | Alternating rhythm key | Tap On-Screen **`[ LEFT ] PEDAL`** Button |
 | **Right Pedal** | Alternating rhythm key | Tap On-Screen **`[ RIGHT ] PEDAL`** Button |
 | **Rhythm Hit (Speed Burst)** | `Spacebar` (Time with green marker) | Tap On-Screen **`[ SPACE / HIT ]`** Button |
-| **Stand Sprint (Uphill Boost)** | Hold `W` (+15% speed, higher posture) | Touch zone boost |
-| **Aero Tuck (Downhill Lean)** | Hold `S` (+10% speed, lower posture) | Touch zone tuck |
 
 ### 4. UI & Menu Navigation
 - **PC:** Mouse Left-Click on buttons (Start, Restart, Menu).
@@ -99,97 +63,8 @@ The game features comprehensive input handling for both **Desktop (PC / Standalo
 
 ---
 
-## 🧠 Game Logic & Implementation Details
 
-### 1. Architecture Overview
-The project employs a decoupled, modular architecture orchestrated by persistent managers:
-
-- **`GameManager` (`Assets/Scripts/GameManager.cs`):**
-  - Configured with `DontDestroyOnLoad`, preserving player performance across all scene transitions.
-  - Tracks cross-stage stamina ($100 \rightarrow 0$), perfect rhythm streaks, stage times, stage distances, and coin counts.
-  - Evaluates the global scoring formula and maintains benchmark comparisons.
-
-- **`TransitionManager` (`Assets/Scripts/TransitionManager.cs`):**
-  - Manages asynchronous scene loading (`SceneManager.LoadSceneAsync`) paired with a smooth canvas group fade-to-black routine.
-  - Automatically regenerates player stamina at **$+0.5\text{ units/sec}$** while screens fade between events.
-
----
-
-### 2. Stage-by-Stage Mechanics
-
-#### Stage 1: Running (`RunnerController.cs`)
-- **Forward Pacing:** Moves forward automatically with a base velocity of $10.0\text{ m/s}$, gradually ramping up to $16.0\text{ m/s}$ ($+0.05\text{ m/s}^2$).
-- **Obstacle Slowdown Penalty:** Colliding with hurdles or StopBoards invokes `OnObstacleHit()`:
-  $$\text{currentSpeed} = \max(\text{currentSpeed} \times 0.5, 2.0\text{ m/s})$$
-  Speed remains halved for a $1.0\text{s}$ penalty duration before ramping smoothly back to normal run speed. Does not cause sudden game over, allowing players to recover.
-- **Collectible Coins (`Coin.cs`):**
-  - Rotating gold coins award $+10$ points to `stageScore` and increment `coinsCollected`.
-  - Equipped with proximity guards ($\le 1.6\text{m}$ horizontal, $\le 2.2\text{m}$ vertical) to prevent incorrect pickup triggers from adjacent lanes.
-- **Stage Completion:** Crossing the finish gate or reaching $500\text{m}$ caches running split metrics and initiates the fade transition to `Swim_Scene`.
-
-#### Stage 2: Swimming (`SwimmerController.cs` & `SwimTransitionManager.cs`)
-- **Stroke Impulse Mechanics:** Swimmer coasts forward via water physics. Pressing stroke applies a forward velocity burst:
-  - **PERFECT Stroke (Green Zone):** $8.0\text{ m/s}$ base impulse + **$1.25\times$ speed burst** ($10.0\text{ m/s}$) + increments Perfect Streak.
-  - **GOOD Stroke (Yellow Zone):** $5.2\text{ m/s}$ impulse; resets streak.
-  - **MISS Stroke (Outside):** $1.8\text{ m/s}$ weak impulse; resets streak.
-- **Oxygen & Stamina Dynamics:**
-  - Active Stroking Drain: $-2.0\text{ oxygen/sec}$
-  - Gliding Drain: $-1.0\text{ oxygen/sec}$
-  - Passive Glide Regeneration: $+0.5\text{ oxygen/sec}$
-- **Exhaustion State:** If oxygen reaches $\le 0$:
-  - Movement speed is clamped to **$30\%$**.
-  - Player enters recovery mode, regaining $+1.0\text{ oxygen/sec}$ until crossing the recovery threshold ($20\text{ oxygen}$).
-- **Streak Reward:** Accumulating **5 consecutive PERFECT strokes** grants an immediate **$+5\text{ oxygen}$** stamina recovery bonus.
-- **Dock Transition Flow:** Player begins on the dock (`Player_RunSwim`), walks into the water trigger zone, presses `E` to dive in (`Player_Swim`), swims the canal course, and presses `E` at the exit dock to transition to `Cycle_Scene`.
-
-#### Stage 3: Cycling (`CyclingCadenceController.cs`)
-- **Cadence Engine:**
-  - Cadence scales from $0.0$ to $8.0$.
-  - Forward velocity follows:
-    $$\text{currentSpeed} = \text{baseSpeed} \times \left(0.3 + 1.1 \times \frac{\text{cadence}}{\text{cadenceMax}}\right)$$
-    At base speed of $12\text{ m/s}$, bike operates between $3.6\text{ m/s}$ ($0$ cadence) and $16.8\text{ m/s}$ ($8$ cadence).
-  - Cadence naturally decays at $-3.0/\text{sec}$ without pedal inputs.
-- **Anti-Cheese Protection:**
-  - Pedaling requires alternating inputs (`Left` $\rightarrow$ `Right` $\rightarrow$ `Left`).
-  - Pressing the same pedal twice consecutively triggers anti-cheese penalty, immediately cutting cadence by $50\%$ ($\times 0.5$).
-- **Rhythm Marker Timing:**
-  - Hitting pedal/spacebar while the oscillating marker is inside the green center zone triggers a **$1.25\times$ speed burst** for $1.2\text{ seconds}$.
-- **Posture Modifiers:**
-  - **Holding W (Uphill Stand):** Lifts rider hips ($+0.12\text{m}$ Y, $+0.06\text{m}$ Z) and yields a **$+15\%$** speed boost.
-  - **Holding S (Aero Tuck):** Drops rider into a streamlined lean yielding a **$+10\%$** speed boost.
-
----
-
-### 3. Global Scoring Formula (Section 6.1)
-The final score presented on the Result Screen is computed using the unified formula:
-
-$$\text{Total Score} = \sum(\text{Stage Distances}) + (\text{Coins Collected} \times \text{Coin Value}) + \text{Bonuses}$$
-
-$$\text{Total Score} = (\text{Run Dist} + \text{Swim Dist} + \text{Cycle Dist}) + (\text{Coins} \times 10) + \text{Bonuses}$$
-
-- **Run Benchmark Distance:** $500\text{ m}$
-- **Swim Benchmark Distance:** $300\text{ m}$ (Canal course: $225\text{ m}$)
-- **Cycle Benchmark Distance:** $1000\text{ m}$
-- **Coin Value:** $10\text{ points per coin}$
-- **Bonuses:** Reserved for race completion medals and clean-run bonuses (rhythm streaks grant stamina bonuses directly during gameplay).
-
----
-
-### 4. Post-Race Results & AI Comparison (`ResultUIController.cs`)
-Upon completing the cycling stage, players arrive at the post-race summary in `UIScene`:
-- **AI Competitor Benchmark:** Set at **`281.20s` (04:41.20)**.
-- **Victory / Defeat Condition:**
-  - If $\text{Total Player Time} < 281.20\text{s} \rightarrow$ **VICTORY** badge displayed with green time delta ($-\Delta t$).
-  - If $\text{Total Player Time} \ge 281.20\text{s} \rightarrow$ **DEFEAT** status with red time deficit ($+\Delta t$).
-- **Detailed Stage Splits Card:** Displays individual times and distances for Swim, Cycle, and Run.
-- **Performance Card:** Shows end-race Stamina percentage, coin count, and score breakdown.
-- **Action Buttons:**
-  - **Restart / Play Again:** Flushes cached stats via `GameManager.ResetRace()` and reloads `Run_Scene`.
-  - **Main Menu:** Hides `ResultPanel` and re-enables `MenuPanel`.
-
----
-
-## 📱 Device & Platform Specifications
+## Device & Platform Specifications
 
 | Specification | Target Configuration |
 | :--- | :--- |
@@ -203,7 +78,7 @@ Upon completing the cycling stage, players arrive at the post-race summary in `U
 
 ---
 
-## 🐛 Bug Fixes, Optimizations & Edge Cases Handled
+## Bug Fixes, Optimizations & Edge Cases Handled
 
 During development and QA testing, the following technical issues were identified and resolved in code:
 
@@ -231,51 +106,7 @@ During development and QA testing, the following technical issues were identifie
 
 ---
 
-## 📁 Repository Directory Structure
 
-```text
-Triathlon_Game/
-├── Assets/
-│   ├── Animations/               # Character animations (run, jump, swim, pedal)
-│   ├── BicycleSystem/            # Bike physics, rigs, and rider models
-│   ├── CartoonTracksPack1/       # 3D road and track modular assets
-│   ├── Prefab/                   # Player, hurdle, obstacle, and coin prefabs
-│   ├── Resources/                # Runtime loadable assets
-│   ├── Scenes/
-│   │   ├── UIScene.unity         # Scene 0: Main Menu & Result UI
-│   │   ├── Run_Scene.unity       # Scene 1: Running Stage
-│   │   ├── Swim_Scene.unity      # Scene 2: Swimming Stage
-│   │   └── Cycle_Scene.unity     # Scene 3: Cycling Stage
-│   ├── Scripts/
-│   │   ├── GameManager.cs        # Persistent cross-stage state & scoring
-│   │   ├── TransitionManager.cs  # Asynchronous screen fade transitions
-│   │   ├── FinishTrigger.cs      # Finish line triggers
-│   │   ├── Run/
-│   │   │   ├── RunnerController.cs      # Endless runner locomotion & physics
-│   │   │   ├── Obstacle.cs              # Hurdle hit logic & speed penalty
-│   │   │   ├── Coin.cs                  # Collectible coin rotation & scoring
-│   │   │   └── RunSceneBootstrap.cs     # Track collider initialization
-│   │   ├── Swim/
-│   │   │   ├── SwimmerController.cs     # Rhythm stroke, oxygen, streak logic
-│   │   │   ├── SwimTransitionManager.cs # Dock entry/exit player swapper
-│   │   │   └── RunSwimController.cs     # Dock jogging locomotion
-│   │   ├── Cycle/
-│   │   │   ├── CycleController.cs       # Base cycling locomotion
-│   │   │   └── CyclingCadenceController.cs # Cadence, rhythm burst, postures
-│   │   └── UI/
-│   │       ├── MainMenuController.cs    # Menu button navigation
-│   │       └── ResultUIController.cs    # Post-race splits & score screen
-│   └── Settings/                 # URP Graphics and Quality profiles
-├── Packages/
-│   └── manifest.json             # Unity package dependencies (URP, Input System)
-├── ProjectSettings/
-│   ├── EditorBuildSettings.asset # Scene build order
-│   └── ProjectVersion.txt        # Unity 6000.3.21f1 declaration
-└── README.md                     # Documentation for assignment grading
-```
-
----
-
-## 🏆 Summary for Evaluators
+## Summary
 
 This project represents an end-to-end triathlon video game experience featuring distinct mechanics per sport (obstacle evasion, rhythm swimming, cadence cycling), unified under a single stamina and scoring architecture. All core assignment criteria, platform adaptations, and technical polish items have been implemented and verified.
