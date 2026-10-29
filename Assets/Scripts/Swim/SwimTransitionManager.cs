@@ -44,7 +44,7 @@ public class SwimTransitionManager : MonoBehaviour
     public Vector3 runStartSpawnEuler = new Vector3(0f, 180f, 0f);
 
     [Tooltip("Spawn position for Player_Swim in the water canal.")]
-    public Vector3 swimSpawnPosition = new Vector3(161.3f, 12.25f, 470.0f);
+    public Vector3 swimSpawnPosition = new Vector3(161.3f, 9.93f, 470.0f);
     public Vector3 swimSpawnEuler = new Vector3(0f, 180f, 0f);
 
     [Tooltip("Point at Finish Line where Player_RunSwim spawns when exiting the water to directly finish the race.")]
@@ -92,15 +92,16 @@ public class SwimTransitionManager : MonoBehaviour
         // 2. Locate or create triggers if missing
         ResolveTriggerZones();
 
-        // 3. Initial character state: Player_RunSwim is active, Player_Swim is inactive
-        if (playerRunSwim != null)
+        // 3. Initial character state:
+        if (playerSwim != null && playerSwim.activeSelf && (playerRunSwim == null || !playerRunSwim.activeSelf))
         {
-            playerRunSwim.SetActive(true);
+            // Direct developer play testing on Player_Swim
+            if (playerRunSwim != null) playerRunSwim.SetActive(false);
         }
-
-        if (playerSwim != null)
+        else
         {
-            playerSwim.SetActive(false);
+            if (playerRunSwim != null) playerRunSwim.SetActive(true);
+            if (playerSwim != null) playerSwim.SetActive(false);
         }
     }
 
@@ -144,8 +145,14 @@ public class SwimTransitionManager : MonoBehaviour
         // 1. Activate Player_Swim at swim spawn location
         if (playerSwim != null)
         {
+            var cc = playerSwim.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+
             playerSwim.transform.position = swimSpawnPosition;
             playerSwim.transform.rotation = Quaternion.Euler(swimSpawnEuler);
+
+            if (cc != null) cc.enabled = true;
+
             playerSwim.SetActive(true);
 
             var swimmer = playerSwim.GetComponent<SwimmerController>();
@@ -227,6 +234,16 @@ public class SwimTransitionManager : MonoBehaviour
 
         Debug.Log($"[SwimTransitionManager] Finish line reached! Transitioning to scene: '{nextSceneName}'");
         ClearPrompt();
+
+        if (playerSwim != null)
+        {
+            var swimmer = playerSwim.GetComponent<SwimmerController>();
+            if (swimmer != null && GameManager.I != null)
+            {
+                GameManager.I.stamina = swimmer.currentOxygen;
+                GameManager.I.perfectStreak = 0;
+            }
+        }
 
         if (TransitionManager.Instance != null)
         {

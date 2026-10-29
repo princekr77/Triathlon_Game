@@ -6682,7 +6682,7 @@ Transform:
   m_GameObject: {fileID: 770942848}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 813.9861, y: 0.1, z: 313.48718}
+  m_LocalPosition: {x: 813.9861, y: 2.5, z: 313.48718}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -13349,7 +13349,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FinishTrigger
   playerTag: Player
-  nextScene: Cycle_Scene
+  nextScene: Swim_Scene
 --- !u!65 &1636411481
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -18987,6 +18987,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Obstacle_01_Slalom_Left
       objectReference: {fileID: 0}
+    - target: {fileID: 8393892894413223907, guid: 9ed66629ed833334e8c0bd66da596766, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8838042041118738781, guid: 9ed66629ed833334e8c0bd66da596766, type: 3}
       propertyPath: m_LocalPosition.x
       value: 813
@@ -19358,6 +19362,10 @@ PrefabInstance:
     - target: {fileID: 7610296916245723189, guid: 911374d39f8339f469702a2b1793d039, type: 3}
       propertyPath: m_LocalPosition.z
       value: 535
+      objectReference: {fileID: 0}
+    - target: {fileID: 7727101282785184970, guid: 911374d39f8339f469702a2b1793d039, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -19777,6 +19785,10 @@ PrefabInstance:
     - target: {fileID: 3361011456738779991, guid: 9ed66629ed833334e8c0bd66da596766, type: 3}
       propertyPath: m_Name
       value: Obstacle_10_RevSlalom_Right
+      objectReference: {fileID: 0}
+    - target: {fileID: 8393892894413223907, guid: 9ed66629ed833334e8c0bd66da596766, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8838042041118738781, guid: 9ed66629ed833334e8c0bd66da596766, type: 3}
       propertyPath: m_LocalPosition.x

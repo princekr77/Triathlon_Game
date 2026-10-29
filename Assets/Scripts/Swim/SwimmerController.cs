@@ -9,19 +9,19 @@ using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 /// <summary>
 /// Swimming Stage (Rhythm Stroke + Oxygen + Streak + Android Touch)
-/// Implements GDD Section 4:
+/// Complete Implementation of GDD Section 4:
 /// - 4.1 Core Logic:
-///   * Stroke-based movement: each valid press (Space / tap right zone) = one stroke impulse -> forward velocity burst.
+///   * Stroke-based movement: each valid press (Space / tap right zone / on-screen STROKE) = one stroke impulse -> forward velocity burst.
 ///   * Rhythm bar with moving marker provides timing judgment (§2.4).
 ///   * PERFECT stroke -> larger impulse + streak count + speed burst (1.25x).
-///   * GOOD / MISS -> smaller/no impulse, streak resets.
+///   * GOOD / MISS -> smaller/no impulse, streak resets to 0.
 ///   * Oxygen = shared stamina bar, displayed as "Oxygen". Starts from carried-over value.
 ///   * Drain: 2.0/sec while stroking, 1.0/sec while gliding.
 ///   * Passive regen: +0.5/sec when gliding (rest vs. push decision).
 ///   * Exhaustion Recovery: fires at stamina <= 0 -> 30% speed + +1.0/sec until 20 oxygen.
-///   * Finish line: transitions to "Cycle_Scene".
+///   * Finish line: transitions to "Cycle_Scene" and carries over stamina.
 /// - 4.2 Streak:
-///   * 5 consecutive PERFECT -> +5 oxygen, "STREAK!" feedback, streak resets to 0.
+///   * 5 consecutive PERFECT -> +5 oxygen/stamina, "STREAK!" feedback, streak resets to 0.
 ///   * Any GOOD / MISS -> streak = 0.
 ///   * Streak reset to 0 at transition.
 /// - 4.3 Scoring:
@@ -56,7 +56,7 @@ public class SwimmerController : MonoBehaviour
     public float strokeImpulseDuration = 0.65f;
 
     [Tooltip("Steering sensitivity for lateral movement.")]
-    public float lateralSpeed = 6.0f;
+    public float lateralSpeed = 5.0f;
 
     [Tooltip("Turning rotation smoothing speed.")]
     public float rotationSmoothing = 8.0f;
@@ -74,7 +74,7 @@ public class SwimmerController : MonoBehaviour
     [Tooltip("Half-width of the yellow good zone (GOOD: within center +/- halfWidth).")]
     [Range(0.10f, 0.30f)] public float goodZoneHalfWidth = 0.20f;
 
-    [Header("4.1 Oxygen (Stamina) Configuration")]
+    [Header("4.1 Oxygen (Global Stamina) Configuration")]
     [Tooltip("Maximum oxygen capacity.")]
     public float maxOxygen = 100.0f;
 
@@ -110,20 +110,23 @@ public class SwimmerController : MonoBehaviour
     [Tooltip("Next scene to load when finishing the swim stage.")]
     public string nextScene = "Cycle_Scene";
 
-    [Header("Canal Boundaries (Terrain & Wall Protection)")]
+    [Header("Canal Boundaries (Strict Wall & Terrain Protection)")]
     [Tooltip("If true, strictly clamps swimmer within canal walls and prevents escaping terrain.")]
     public bool clampToCanal = true;
     public float minCanalX = 153.0f;
     public float maxCanalX = 169.5f;
-    public float minCanalZ = 246.0f;
+    public float minCanalZ = 248.0f;
     public float maxCanalZ = 472.0f;
 
     [Header("Water Surface Alignment & Buoyancy")]
-    [Tooltip("Target water surface Y level. Auto-detected from Water_Surface if present.")]
-    public float waterSurfaceY = 12.6f;
+    [Tooltip("Target water surface elevation (Y level). Set to 9.93 for exact surface fit.")]
+    public float waterSurfaceY = 9.93f;
 
-    [Tooltip("Vertical offset to ensure the swimmer properly lays prone on water surface.")]
-    public float surfaceOffset = -0.35f;
+    [Tooltip("Player water surface offset (exact Y level = 9.93).")]
+    public float waterSurfaceOffset = 9.93f;
+
+    [Tooltip("Fine-tuning vertical offset (applied on top of water surface offset).")]
+    public float surfaceOffset = 0.0f;
 
     [Tooltip("Body pitch tilt in degrees to ensure flat prone swimming posture.")]
     public float bodyPitch = 0.0f;
@@ -134,7 +137,7 @@ public class SwimmerController : MonoBehaviour
     [Tooltip("Enables gentle realistic water bobbing and stroke sway.")]
     public bool enableWaterBobbing = true;
     public float bobbingFrequency = 3.2f;
-    public float bobbingAmplitude = 0.05f;
+    public float bobbingAmplitude = 0.04f;
     public float rollSwayAmplitude = 3.0f;
 
     [Header("Animation")]
@@ -173,16 +176,17 @@ public class SwimmerController : MonoBehaviour
     private TimingResult lastTimingResult = TimingResult.None;
     private float timingBannerTimer = 0.0f;
 
-    // Oxygen state
+    // Oxygen state (Globally synced with GameManager.I.stamina)
     private float oxygen = 100.0f;
     private bool isExhausted = false;
 
-    // Streak state
+    // Streak state (§4.2)
     private int perfectStreak = 0;
     private float streakRewardTimer = 0.0f;
 
     // Distance & Stage
     private float stageDistance = 0.0f;
+    private float stageTime = 0.0f;
     private Vector3 lastPosition;
     private bool stageCompleted = false;
 
@@ -190,17 +194,57 @@ public class SwimmerController : MonoBehaviour
     private float lateralInput = 0.0f;
     private float touchSteerHeld = 0.0f;
 
+    // Public Accessors
+    public float Oxygen => oxygen;
+    public float currentOxygen => oxygen;
+    public float CurrentOxygen => oxygen;
+    public float StageDistance => stageDistance;
+    public float StageTime => stageTime;
+    public int PerfectStreak => perfectStreak;
+    public bool IsExhausted => isExhausted;
+    public TimingResult CurrentTimingResult => lastTimingResult;
+
     private void Awake()
     {
-        // 1. Resolve Animator
+        // 1. Ensure GameManager exists globally so stamina is calculated and carried to Cycle_Scene
+        EnsureGameManagerExists();
+
+        // 2. Remove any lingering CharacterController that could block movement
+        var cc = GetComponent<CharacterController>();
+        if (cc != null)
+        {
+            cc.enabled = false;
+            Destroy(cc);
+        }
+
+        // 3. Ensure kinematic Rigidbody and trigger Collider for PhysX zone interactions
+        if (!TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb = gameObject.AddComponent<Rigidbody>();
+        }
+        rb.isKinematic = true;
+
+        var col = GetComponent<Collider>();
+        if (col == null)
+        {
+            var box = gameObject.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.size = new Vector3(1.4f, 0.8f, 2.0f);
+        }
+        else
+        {
+            col.isTrigger = true;
+        }
+
+        // 4. Cache Animator
         if (animator == null)
         {
-            animator = GetComponentInChildren<Animator>();
+            animator = GetComponent<Animator>();
+            if (animator == null) animator = GetComponentInChildren<Animator>();
         }
 
         if (animator != null)
         {
-            animator.applyRootMotion = false;
             speedHash = Animator.StringToHash(speedParam);
             isSwimmingHash = Animator.StringToHash(isSwimmingParam);
 
@@ -216,34 +260,7 @@ public class SwimmerController : MonoBehaviour
             }
         }
 
-        // 2. Auto-detect Water_Surface in scene to get exact water height and disable solid blocking
-        GameObject waterObj = GameObject.Find("Water_Surface");
-        if (waterObj != null)
-        {
-            waterSurfaceY = waterObj.transform.position.y;
-            if (waterObj.TryGetComponent<Collider>(out var waterCol))
-            {
-                waterCol.isTrigger = true;
-            }
-        }
-
-        // 3. Ensure kinematic Rigidbody and trigger Collider for PhysX zone interactions
-        if (!TryGetComponent<Rigidbody>(out var rb))
-        {
-            rb = gameObject.AddComponent<Rigidbody>();
-        }
-        rb.isKinematic = true;
-        rb.useGravity = false;
-
-        if (!TryGetComponent<Collider>(out var col))
-        {
-            var box = gameObject.AddComponent<BoxCollider>();
-            box.isTrigger = true;
-            box.size = new Vector3(2.0f, 1.0f, 2.5f);
-            box.center = new Vector3(0f, 0f, 0f);
-        }
-
-        // 4. Initialize Oxygen from carried-over stamina
+        // 5. Initialize Oxygen from carried-over stamina
         if (GameManager.I != null)
         {
             oxygen = Mathf.Clamp(GameManager.I.stamina, 0f, maxOxygen);
@@ -255,40 +272,29 @@ public class SwimmerController : MonoBehaviour
         }
 
         currentHeadingYaw = transform.eulerAngles.y;
-        if (Mathf.Abs(currentHeadingYaw) < 1f)
-        {
-            currentHeadingYaw = 180f;
-        }
-
         lastPosition = transform.position;
+    }
+
+    private void Start()
+    {
+        mainCam = Camera.main;
+
+        // Snap immediately to water surface at start
+        SnapToWaterSurface();
+
+        if (autoFollowCamera && mainCam != null)
+        {
+            mainCam.transform.position = transform.position + cameraOffset;
+            mainCam.transform.LookAt(transform.position + Vector3.up * 0.5f);
+        }
     }
 
     private void OnEnable()
     {
-        if (mainCam == null)
-        {
-            mainCam = Camera.main;
-        }
-
-        // Pull latest stamina if GameManager exists
-        if (GameManager.I != null)
-        {
-            oxygen = Mathf.Clamp(GameManager.I.stamina, 0f, maxOxygen);
-        }
-
-        // Initial prone placement
-        SnapToWaterSurface();
-        lastPosition = transform.position;
-
-        if (animator != null)
-        {
-            if (hasIsSwimmingParam) animator.SetBool(isSwimmingHash, true);
-            animator.Play(swimStateName, 0, 0f);
-        }
-
 #if ENABLE_INPUT_SYSTEM
         EnhancedTouchSupport.Enable();
 #endif
+        SnapToWaterSurface();
     }
 
     private void OnDisable()
@@ -298,62 +304,67 @@ public class SwimmerController : MonoBehaviour
 #endif
     }
 
-    private void Start()
-    {
-        if (mainCam == null)
-        {
-            mainCam = Camera.main;
-        }
-
-        SnapToWaterSurface();
-        lastPosition = transform.position;
-
-        if (animator != null)
-        {
-            animator.Play(swimStateName, 0, 0f);
-        }
-    }
-
     private void Update()
     {
-        if (stageCompleted) return;
+        // 1. Process Race / Stage Time
+        if (!stageCompleted)
+        {
+            stageTime += Time.deltaTime;
+        }
 
-        // 1. Rhythm Marker Oscillation (0.0 to 1.0)
-        rhythmMarkerPos = Mathf.PingPong(Time.time * rhythmSpeed, 1.0f);
+        // 2. Update Rhythm Marker Oscillation (§2.4 & §4.1)
+        UpdateRhythmMarker();
 
-        // 2. Read Inputs (Keyboard, Gamepad, Touch)
+        // 3. Read Player Inputs (Keyboard, Gamepad, Android Touch)
         ReadInputs();
 
-        // 3. Update Oxygen & Exhaustion Logic (§4.1)
-        UpdateOxygen();
+        // 4. Update Hydrodynamic Forward & Lateral Swimming Physics
+        UpdateSwimmingPhysics();
 
-        // 4. Update Velocity & Forward Glide Deceleration
-        UpdateMovementSpeed();
+        // 5. Update Oxygen / Stamina Drain, Passive Glide Regen & Exhaustion Recovery (§4.1)
+        UpdateOxygenStamina();
 
-        // 5. Execute World Movement & Enforce Terrain/Canal Clamping
-        ExecuteMovement();
+        // 6. Update Distance & Stage Progress
+        UpdateDistanceAndScoring();
 
-        // 6. Water Surface Alignment & Prone Laying
-        AlignWaterSurface();
-
-        // 7. Update Distance Progress & Check Finish Line
-        UpdateDistanceAndScore();
-
-        // 8. Timers for UI feedback banners
-        if (timingBannerTimer > 0f) timingBannerTimer -= Time.deltaTime;
-        if (streakRewardTimer > 0f) streakRewardTimer -= Time.deltaTime;
-        if (activeStrokeTimer > 0f) activeStrokeTimer -= Time.deltaTime;
-
-        // 9. Sync Animation Speed
+        // 7. Update Animation Looping and Swimming Speed
         UpdateAnimationLoop();
+
+        // 8. Decay Visual Feedback Banners
+        UpdateFeedbackTimers();
     }
 
     private void LateUpdate()
     {
-        if (autoFollowCamera && mainCam != null && mainCam.GetComponent<SwimCameraFollow>() == null)
+        if (autoFollowCamera && mainCam != null && (SwimCameraFollow.Instance == null || !SwimCameraFollow.Instance.enabled))
         {
             UpdateCameraFollow();
         }
+    }
+
+    /// <summary>
+    /// Rhythm marker oscillates back and forth across [0.0, 1.0] (§2.4).
+    /// </summary>
+    private void UpdateRhythmMarker()
+    {
+        // PingPong produces 0.0 -> 1.0 -> 0.0 continuously
+        rhythmMarkerPos = Mathf.PingPong(Time.time * rhythmSpeed, 1.0f);
+    }
+
+    /// <summary>
+    /// Snaps position immediately to water surface (exact Y = 9.93).
+    /// </summary>
+    public void SnapToWaterSurface()
+    {
+        Vector3 pos = transform.position;
+        pos.y = waterSurfaceOffset + surfaceOffset;
+        if (clampToCanal)
+        {
+            pos.x = Mathf.Clamp(pos.x, minCanalX, maxCanalX);
+            pos.z = Mathf.Clamp(pos.z, minCanalZ, maxCanalZ);
+        }
+        transform.position = pos;
+        transform.rotation = Quaternion.Euler(bodyPitch, currentHeadingYaw, bodyRoll);
     }
 
     /// <summary>
@@ -455,8 +466,8 @@ public class SwimmerController : MonoBehaviour
 
     /// <summary>
     /// Evaluates rhythm marker position when the player presses stroke.
-    /// PERFECT -> speed burst + streak count.
-    /// GOOD / MISS -> smaller/no impulse, streak resets.
+    /// PERFECT -> speed burst (1.25x) + streak count.
+    /// GOOD / MISS -> smaller/no impulse, streak resets to 0.
     /// </summary>
     public void PerformStrokeWithTiming()
     {
@@ -479,100 +490,50 @@ public class SwimmerController : MonoBehaviour
             if (perfectStreak >= streakGoal)
             {
                 // 5 consecutive PERFECT -> +5 oxygen, "STREAK!" feedback, streak resets
-                oxygen = Mathf.Min(maxOxygen, oxygen + streakOxygenReward);
-                streakRewardTimer = 2.0f;
+                oxygen = Mathf.Clamp(oxygen + streakOxygenReward, 0f, maxOxygen);
+                if (GameManager.I != null)
+                {
+                    GameManager.I.stamina = oxygen;
+                }
+                streakRewardTimer = 1.6f;
                 perfectStreak = 0;
-                Debug.Log("[SwimmerController] 5 PERFECT STREAK! +5 Oxygen awarded!");
             }
         }
         // 2. GOOD STROKE (Yellow Zone)
         else if (distFromCenter <= goodZoneHalfWidth)
         {
             lastTimingResult = TimingResult.Good;
-            timingBannerTimer = 1.0f;
+            timingBannerTimer = 0.9f;
 
             float strokeSpeed = goodStrokeSpeed * (isExhausted ? exhaustionSpeedMultiplier : 1.0f);
             currentForwardSpeed = Mathf.Max(currentForwardSpeed, strokeSpeed);
             activeStrokeTimer = strokeImpulseDuration;
 
-            // Any GOOD resets streak (§4.2)
+            // Any GOOD resets streak
             perfectStreak = 0;
         }
-        // 3. MISS (Red Zone / Outside)
+        // 3. MISS (Outside Zones)
         else
         {
             lastTimingResult = TimingResult.Miss;
-            timingBannerTimer = 1.0f;
+            timingBannerTimer = 0.9f;
 
             float strokeSpeed = missStrokeSpeed * (isExhausted ? exhaustionSpeedMultiplier : 1.0f);
             currentForwardSpeed = Mathf.Max(currentForwardSpeed, strokeSpeed);
-            activeStrokeTimer = strokeImpulseDuration * 0.4f;
+            activeStrokeTimer = strokeImpulseDuration * 0.5f;
 
-            // Any MISS resets streak (§4.2)
+            // Any MISS resets streak
             perfectStreak = 0;
         }
-
-        // Trigger swimming animator stroke
-        if (animator != null)
-        {
-            animator.Play(swimStateName, 0, 0f);
-        }
     }
 
     /// <summary>
-    /// Handles Oxygen drain, passive glide regen, and exhaustion recovery (§4.1).
+    /// Hydrodynamic swimming physics: forward velocity glide deceleration, lateral steering,
+    /// canal boundary clamping, and water surface positioning (9.93).
     /// </summary>
-    private void UpdateOxygen()
+    private void UpdateSwimmingPhysics()
     {
-        // 1. If Exhausted (stamina <= 0):
-        if (isExhausted)
-        {
-            // Recover +1.0/sec until 20 oxygen
-            oxygen += exhaustionRegenRate * Time.deltaTime;
-            if (oxygen >= exhaustionRecoverThreshold)
-            {
-                isExhausted = false;
-                Debug.Log("[SwimmerController] Recovered from exhaustion!");
-            }
-        }
-        else
-        {
-            // 2. Active Stroking: drain 2.0/sec
-            if (activeStrokeTimer > 0f)
-            {
-                oxygen -= activeDrainRate * Time.deltaTime;
-            }
-            // 3. Gliding (no stroke input active): glide drain 1.0/sec + passive regen 0.5/sec (net: -0.5/sec)
-            else
-            {
-                oxygen -= (glideDrainRate - passiveRegenRate) * Time.deltaTime;
-            }
-
-            // Check for exhaustion trigger
-            if (oxygen <= 0f)
-            {
-                oxygen = 0f;
-                isExhausted = true;
-                Debug.Log("[SwimmerController] Swimmer is EXHAUSTED! Speed reduced to 30%, recovering +1/s...");
-            }
-        }
-
-        oxygen = Mathf.Clamp(oxygen, 0f, maxOxygen);
-
-        // Sync with GameManager
-        if (GameManager.I != null)
-        {
-            GameManager.I.stamina = oxygen;
-            GameManager.I.recovering = isExhausted;
-            GameManager.I.perfectStreak = perfectStreak;
-        }
-    }
-
-    /// <summary>
-    /// Decelerates forward velocity smoothly towards glide speed with water drag.
-    /// </summary>
-    private void UpdateMovementSpeed()
-    {
+        // 1. Forward velocity deceleration towards glide speed
         float targetDecelSpeed = isExhausted ? (minGlideSpeed * exhaustionSpeedMultiplier) : minGlideSpeed;
 
         if (currentForwardSpeed > targetDecelSpeed)
@@ -584,93 +545,123 @@ public class SwimmerController : MonoBehaviour
             currentForwardSpeed = Mathf.MoveTowards(currentForwardSpeed, targetDecelSpeed, 4.0f * Time.deltaTime);
         }
 
-        // Cap speed if exhausted
+        // Cap speed if exhausted (§4.1)
         if (isExhausted)
         {
             currentForwardSpeed = Mathf.Min(currentForwardSpeed, perfectStrokeSpeed * exhaustionSpeedMultiplier);
         }
-    }
 
-    /// <summary>
-    /// Applies movement and strictly clamps the swimmer within the canal boundaries (preventing escaping terrain).
-    /// </summary>
-    private void ExecuteMovement()
-    {
-        // Heading is -Z along the water canal
+        // 2. Compute Movement: Heading is -Z along the water canal
         Vector3 forwardMove = -Vector3.forward * (currentForwardSpeed * Time.deltaTime);
-        // Note: Facing -Z down the canal means Screen-Left is +X and Screen-Right is -X.
-        // Therefore, pressing 'A' (lateralInput = -1) moves +X (Left), and 'D' (lateralInput = +1) moves -X (Right).
+        // Facing -Z down the canal: Screen-Left is +X (A key), Screen-Right is -X (D key)
         Vector3 lateralMove = -Vector3.right * (lateralInput * lateralSpeed * Time.deltaTime);
         Vector3 pos = transform.position + forwardMove + lateralMove;
 
-        // Strict boundary protection: Clamps swimmer to canal walls and prevents escaping terrain
+        // 3. Strict Canal Boundary Clamping (strictly prevents escaping canal into terrain)
         if (clampToCanal)
         {
             pos.x = Mathf.Clamp(pos.x, minCanalX, maxCanalX);
             pos.z = Mathf.Clamp(pos.z, minCanalZ, maxCanalZ);
         }
 
+        // 4. Target Water Surface Y Elevation (9.93) with gentle water bobbing
+        float targetY = waterSurfaceOffset + surfaceOffset;
+        float bobbing = 0f;
+        float rollSway = 0f;
+
+        if (enableWaterBobbing && currentForwardSpeed > 0.1f)
+        {
+            bobbing = Mathf.Sin(Time.time * bobbingFrequency) * bobbingAmplitude;
+            rollSway = Mathf.Sin(Time.time * (bobbingFrequency * 0.5f)) * rollSwayAmplitude;
+        }
+
+        pos.y = targetY + bobbing;
         transform.position = pos;
 
-        // Orientation: Lay flat horizontally on water with gentle stroke roll.
-        // Turning Left (lateralInput = -1) turns yaw towards 90 deg (+X).
-        // Turning Right (lateralInput = +1) turns yaw towards 270 deg (-X).
+        // 5. Orientation: Lay flat horizontally on water with gentle stroke roll
         float steerYawAngle = currentHeadingYaw + (lateralInput * 12.0f);
-        float rollSway = (enableWaterBobbing && currentForwardSpeed > 0.1f)
-            ? Mathf.Sin(Time.time * (bobbingFrequency * 0.5f)) * rollSwayAmplitude
-            : 0f;
-
         Quaternion targetRotation = Quaternion.Euler(bodyPitch, steerYawAngle, bodyRoll + rollSway);
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSmoothing * Time.deltaTime);
     }
 
     /// <summary>
-    /// Snaps and locks the swimmer prone horizontally on the water surface with realistic buoyancy bobbing.
+    /// Section 4.1 Oxygen (Global Stamina) Logic:
+    /// - Drain: 2.0/sec while stroking, 1.0/sec while gliding.
+    /// - Passive regen: +0.5/sec if gliding without stroke input this frame (rest vs. push).
+    /// - Exhaustion Recovery: stamina <= 0 -> 30% speed + +1.0/sec until 20 oxygen.
     /// </summary>
-    private void AlignWaterSurface()
+    private void UpdateOxygenStamina()
     {
-        Vector3 pos = transform.position;
-        float targetY = waterSurfaceY + surfaceOffset;
-        float bobbing = 0f;
+        float dt = Time.deltaTime;
 
-        if (enableWaterBobbing && currentForwardSpeed > 0.1f)
+        if (activeStrokeTimer > 0f)
         {
-            bobbing = Mathf.Sin(Time.time * bobbingFrequency) * bobbingAmplitude;
+            activeStrokeTimer -= dt;
         }
 
-        pos.y = targetY + bobbing;
-        transform.position = pos;
+        // Exhaustion State Handling
+        if (oxygen <= 0f)
+        {
+            isExhausted = true;
+        }
+        else if (isExhausted && oxygen >= exhaustionRecoverThreshold)
+        {
+            isExhausted = false;
+        }
+
+        if (isExhausted)
+        {
+            // Exhaustion Recovery: +1.0/sec until 20 oxygen (§4.1)
+            oxygen += exhaustionRegenRate * dt;
+        }
+        else
+        {
+            // Active stroking drain: 2.0/sec
+            if (activeStrokeTimer > 0f)
+            {
+                oxygen -= activeDrainRate * dt;
+            }
+            // Glide state: rest vs push decision
+            else
+            {
+                // Coasting glide drain: 1.0/sec
+                if (currentForwardSpeed > minGlideSpeed + 0.1f)
+                {
+                    oxygen -= glideDrainRate * dt;
+                }
+                // Passive glide regen: +0.5/sec (§4.1)
+                else
+                {
+                    oxygen += passiveRegenRate * dt;
+                }
+            }
+        }
+
+        oxygen = Mathf.Clamp(oxygen, 0f, maxOxygen);
+
+        // Global Synchronization: Carry over to Cycle_Scene via GameManager
+        if (GameManager.I != null)
+        {
+            GameManager.I.stamina = oxygen;
+            GameManager.I.recovering = isExhausted;
+            GameManager.I.perfectStreak = perfectStreak;
+        }
     }
 
     /// <summary>
-    /// Snaps position immediately to water surface.
+    /// Updates distance traveled, score, and checks finish condition (§4.1 & §4.3).
     /// </summary>
-    public void SnapToWaterSurface()
+    private void UpdateDistanceAndScoring()
     {
-        Vector3 pos = transform.position;
-        pos.y = waterSurfaceY + surfaceOffset;
-        if (clampToCanal)
-        {
-            pos.x = Mathf.Clamp(pos.x, minCanalX, maxCanalX);
-            pos.z = Mathf.Clamp(pos.z, minCanalZ, maxCanalZ);
-        }
-        transform.position = pos;
-        transform.rotation = Quaternion.Euler(bodyPitch, currentHeadingYaw, bodyRoll);
-    }
-
-    /// <summary>
-    /// Updates distance traveled, score, and triggers finish when target distance is reached (§4.3 & §8).
-    /// </summary>
-    private void UpdateDistanceAndScore()
-    {
-        float movedZ = Mathf.Abs(transform.position.z - lastPosition.z);
-        stageDistance += movedZ;
+        float delta = Vector3.Distance(transform.position, lastPosition);
+        stageDistance += delta;
         lastPosition = transform.position;
 
         if (GameManager.I != null)
         {
-            GameManager.I.totalScore += movedZ;
+            GameManager.I.totalScore = stageDistance;
             GameManager.I.totalTime += Time.deltaTime;
+            GameManager.I.swimTime = stageTime;
         }
 
         // Check if finished by target distance or reached canal end
@@ -684,54 +675,80 @@ public class SwimmerController : MonoBehaviour
             }
             else
             {
-                // Direct finish transition to Cycle_Scene if no manager is present
                 CompleteSwimStage();
             }
         }
     }
 
     /// <summary>
-    /// Completes the swim stage and transitions to Cycle_Scene.
+    /// Directly completes swim stage and loads Cycle_Scene.
     /// </summary>
     public void CompleteSwimStage()
     {
         if (stageCompleted) return;
         stageCompleted = true;
 
-        Debug.Log($"[SwimmerController] Swim stage complete! Distance: {stageDistance:F1}m. Transitioning to '{nextScene}'...");
-
-        // Reset streak at transition (§4.2)
-        perfectStreak = 0;
         if (GameManager.I != null)
         {
-            GameManager.I.perfectStreak = 0;
             GameManager.I.stamina = oxygen;
+            GameManager.I.perfectStreak = 0; // Streak reset to 0 at transition (§4.2)
+            GameManager.I.swimTime = stageTime;
         }
 
         if (TransitionManager.Instance != null)
         {
-            TransitionManager.Instance.BeginTransition(
-                nextScene: nextScene,
-                onComplete: () =>
-                {
-                    if (GameManager.I != null)
-                        GameManager.I.LoadScene(nextScene);
-                    else
-                        SceneManager.LoadScene(nextScene);
-                }
-            );
+            TransitionManager.Instance.BeginTransition(nextScene, () =>
+            {
+                if (GameManager.I != null) GameManager.I.LoadScene(nextScene);
+                else SceneManager.LoadScene(nextScene);
+            });
         }
         else
         {
-            if (GameManager.I != null)
-                GameManager.I.LoadScene(nextScene);
+            if (GameManager.I != null) GameManager.I.LoadScene(nextScene);
+            else SceneManager.LoadScene(nextScene);
+        }
+    }
+
+    private void UpdateFeedbackTimers()
+    {
+        if (timingBannerTimer > 0f)
+        {
+            timingBannerTimer -= Time.deltaTime;
+            if (timingBannerTimer <= 0f)
+            {
+                lastTimingResult = TimingResult.None;
+            }
+        }
+
+        if (streakRewardTimer > 0f)
+        {
+            streakRewardTimer -= Time.deltaTime;
+        }
+    }
+
+    private void EnsureGameManagerExists()
+    {
+        if (GameManager.I == null)
+        {
+            var existing = FindFirstObjectByType<GameManager>();
+            if (existing != null)
+            {
+                GameManager.I = existing;
+            }
             else
-                SceneManager.LoadScene(nextScene);
+            {
+                var gmGo = new GameObject("GameManager");
+                var gm = gmGo.AddComponent<GameManager>();
+                gm.stamina = 100f;
+                gm.perfectStreak = 0;
+                Debug.Log("[SwimmerController] Created global persistent GameManager for cross-scene stamina calculation.");
+            }
         }
     }
 
     /// <summary>
-    /// Updates Animator loop and syncs animation playback rate with speed.
+    /// Ensures the swimming animation loops continuously and syncs speed.
     /// </summary>
     private void UpdateAnimationLoop()
     {
@@ -759,9 +776,6 @@ public class SwimmerController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Smooth chase camera follow behind the swimmer.
-    /// </summary>
     private void UpdateCameraFollow()
     {
         Vector3 targetCamPos = transform.position + cameraOffset;
@@ -772,7 +786,7 @@ public class SwimmerController : MonoBehaviour
         mainCam.transform.rotation = Quaternion.Slerp(mainCam.transform.rotation, targetCamRot, cameraRotationSpeed * Time.deltaTime);
     }
 
-    #region OnGUI HUD & Android Touch Controls (Section 4.4)
+    #region OnGUI HUD & Android Touch Controls (§4.4)
 
     private void OnGUI()
     {
@@ -781,8 +795,6 @@ public class SwimmerController : MonoBehaviour
         float screenW = Screen.width;
         float screenH = Screen.height;
 
-        // Dynamic 2D scale: tracks whichever dimension is more constrained (width or height)
-        // so UI perfectly adapts on both left-right and top-down screen resize without overflowing.
         float scaleW = screenW / 1100f;
         float scaleH = screenH / 650f;
         float uiScale = Mathf.Clamp(Mathf.Min(scaleW, scaleH), 0.55f, 1.45f);
@@ -804,203 +816,222 @@ public class SwimmerController : MonoBehaviour
         float padX = Mathf.Clamp(12f * uiScale, 8f, 22f);
         float padY = Mathf.Clamp(5f * uiScale, 3f, 12f);
 
-        // Exactly calculated inner height to fit all 5 items + bars + gaps perfectly
         float innerHeight = (5f * labelH) + (2f * progressH) + rhythmH + (4f * gap);
         float hudHeight = innerHeight + (padY * 2f);
         Rect hudRect = new Rect(hudX, hudY, hudWidth, hudHeight);
 
-        // Semi-transparent dark background
-        GUI.color = new Color(0.08f, 0.10f, 0.16f, 0.90f);
-        GUI.DrawTexture(hudRect, Texture2D.whiteTexture);
-        GUI.color = Color.white;
+        Color prevBg = GUI.backgroundColor;
+        Color prevContent = GUI.contentColor;
 
-        GUILayout.BeginArea(new Rect(hudRect.x + padX, hudRect.y + padY, hudWidth - (padX * 2f), innerHeight));
+        GUI.backgroundColor = new Color(0.06f, 0.09f, 0.14f, 0.88f);
+        GUI.Box(hudRect, GUIContent.none);
 
-        // 1. Distance Header & Bar
-        float dist01 = Mathf.Clamp01(stageDistance / targetDistance);
-        GUILayout.Label($"<b>Distance:</b> {stageDistance:F0}m / {targetDistance:F0}m  ({dist01 * 100f:F0}%)", GetBoldLabelStyle(labelFontSize, labelH), GUILayout.Height(labelH));
-        DrawProgressBar(dist01, new Color(0.2f, 0.75f, 1.0f), progressH);
+        float curY = hudY + padY;
+        float contentW = hudWidth - (padX * 2f);
+        float contentX = hudX + padX;
 
-        GUILayout.Space(gap);
+        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = labelFontSize,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleLeft
+        };
+        labelStyle.normal.textColor = Color.white;
 
-        // 2. Oxygen Bar (Shared Stamina labeled "Oxygen")
-        float oxy01 = Mathf.Clamp01(oxygen / maxOxygen);
-        Color oxyColor = isExhausted ? Color.red : (oxy01 > 0.45f ? new Color(0.1f, 0.9f, 0.85f) : (oxy01 > 0.2f ? Color.yellow : new Color(1f, 0.35f, 0.35f)));
-        string oxyStatus = isExhausted ? "<color=red><b>EXHAUSTED! (+1/s Recovery)</b></color>" : $"{oxygen:F0}%";
-        GUILayout.Label($"<b>Oxygen:</b> {oxyStatus}", GetBoldLabelStyle(labelFontSize, labelH), GUILayout.Height(labelH));
-        DrawProgressBar(oxy01, oxyColor, progressH);
+        GUIStyle rightLabelStyle = new GUIStyle(labelStyle)
+        {
+            alignment = TextAnchor.MiddleRight
+        };
 
-        GUILayout.Space(gap);
+        // 1. Distance Bar
+        float distPct = Mathf.Clamp01(stageDistance / targetDistance);
+        Rect distRow = new Rect(contentX, curY, contentW, labelH);
+        GUI.Label(distRow, "DISTANCE", labelStyle);
+        GUI.Label(distRow, $"{stageDistance:F0}m / {targetDistance:F0}m", rightLabelStyle);
+        curY += labelH;
+
+        Rect distBarRect = new Rect(contentX, curY, contentW, progressH);
+        DrawHorizontalBar(distBarRect, distPct, new Color(0.2f, 0.7f, 1.0f), new Color(0.12f, 0.15f, 0.22f));
+        curY += progressH + gap;
+
+        // 2. Oxygen Bar (Shared Stamina)
+        float oxyPct = Mathf.Clamp01(oxygen / maxOxygen);
+        Color oxyColor = isExhausted ? new Color(1.0f, 0.25f, 0.25f) : (oxyPct > 0.35f ? new Color(0.15f, 0.90f, 0.45f) : new Color(0.95f, 0.75f, 0.15f));
+        string statusText = isExhausted ? "EXHAUSTED (+1.0/s)" : (activeStrokeTimer > 0f ? "STROKING (-2.0/s)" : (currentForwardSpeed > minGlideSpeed + 0.1f ? "GLIDING (-1.0/s)" : "REGEN (+0.5/s)"));
+
+        Rect oxyRow = new Rect(contentX, curY, contentW, labelH);
+        GUI.Label(oxyRow, "OXYGEN", labelStyle);
+        GUI.Label(oxyRow, $"{oxygen:F0}% ({statusText})", rightLabelStyle);
+        curY += labelH;
+
+        Rect oxyBarRect = new Rect(contentX, curY, contentW, progressH);
+        DrawHorizontalBar(oxyBarRect, oxyPct, oxyColor, new Color(0.12f, 0.15f, 0.22f));
+        curY += progressH + gap;
 
         // 3. Streak Counter (§4.2)
-        string stars = "";
+        Rect streakRow = new Rect(contentX, curY, contentW, labelH);
+        string streakStars = "";
         for (int i = 0; i < streakGoal; i++)
         {
-            stars += (i < perfectStreak) ? "★ " : "☆ ";
+            streakStars += (i < perfectStreak) ? "★ " : "☆ ";
         }
-        GUILayout.Label($"<b>Streak:</b> {perfectStreak}/{streakGoal}  <color=yellow>{stars}</color>  <size={subFontSize}>(5 PERFECT -> +5 Oxygen)</size>", GetBoldLabelStyle(labelFontSize, labelH), GUILayout.Height(labelH));
+        GUI.Label(streakRow, "STREAK", labelStyle);
+        GUIStyle starStyle = new GUIStyle(rightLabelStyle);
+        starStyle.normal.textColor = (perfectStreak > 0) ? new Color(1.0f, 0.85f, 0.2f) : Color.gray;
+        GUI.Label(streakRow, $"{streakStars} ({perfectStreak}/{streakGoal})", starStyle);
+        curY += labelH;
 
-        GUILayout.Space(gap);
+        // 4. Rhythm Bar with Green/Yellow Zones (§4.1 & §4.4)
+        Rect rhythmRow = new Rect(contentX, curY, contentW, labelH);
+        GUI.Label(rhythmRow, "RHYTHM STROKE (SPACE / TAP RIGHT)", labelStyle);
+        curY += labelH;
 
-        // 4. Rhythm Timing Bar with Green/Yellow Zones & Moving Marker
-        GUILayout.Label("<b>Rhythm Timing (Press SPACE / Tap on Green):</b>", GetBoldLabelStyle(labelFontSize, labelH), GUILayout.Height(labelH));
-        DrawRhythmTimingBar(rhythmH);
+        Rect rhythmRect = new Rect(contentX, curY, contentW, rhythmH);
+        DrawRhythmBar(rhythmRect, rhythmMarkerPos);
+        curY += rhythmH + gap;
 
-        GUILayout.Space(gap);
+        // 5. Speed & Timing Feedback readout
+        Rect speedRow = new Rect(contentX, curY, contentW, labelH);
+        GUI.Label(speedRow, $"SPEED: {currentForwardSpeed:F1} m/s", labelStyle);
 
-        // 5. Timing Feedback Banner
-        DrawFeedbackBanner(feedbackFontSize, subFontSize, labelH);
-
-        GUILayout.EndArea();
-
-        // --- ANDROID ON-SCREEN TOUCH CONTROLS ---
-        if (showTouchControls)
-        {
-            DrawAndroidTouchHUD(screenW, screenH, uiScale);
-        }
-    }
-
-    private void DrawFeedbackBanner(int feedbackFontSize, int subFontSize, float labelH)
-    {
         if (streakRewardTimer > 0f)
         {
-            GUI.color = Color.yellow;
-            GUILayout.Label("★ <b>STREAK COMPLETED! +5 OXYGEN REWARD!</b> ★", GetBoldLabelStyle(feedbackFontSize, labelH), GUILayout.Height(labelH));
-            GUI.color = Color.white;
+            GUIStyle stStyle = new GUIStyle(rightLabelStyle) { fontSize = feedbackFontSize };
+            stStyle.normal.textColor = new Color(0.2f, 1.0f, 0.5f);
+            GUI.Label(speedRow, "★ STREAK! +5 OXYGEN ★", stStyle);
         }
-        else if (timingBannerTimer > 0f)
+        else if (lastTimingResult != TimingResult.None)
         {
-            if (lastTimingResult == TimingResult.Perfect)
+            GUIStyle fbStyle = new GUIStyle(rightLabelStyle) { fontSize = feedbackFontSize };
+            switch (lastTimingResult)
             {
-                GUI.color = Color.green;
-                GUILayout.Label("★ <b>PERFECT STROKE! (+25% SPEED BURST)</b> ★", GetBoldLabelStyle(feedbackFontSize, labelH), GUILayout.Height(labelH));
-                GUI.color = Color.white;
-            }
-            else if (lastTimingResult == TimingResult.Good)
-            {
-                GUI.color = Color.yellow;
-                GUILayout.Label("✔ <b>GOOD STROKE</b>", GetBoldLabelStyle(feedbackFontSize, labelH), GUILayout.Height(labelH));
-                GUI.color = Color.white;
-            }
-            else if (lastTimingResult == TimingResult.Miss)
-            {
-                GUI.color = new Color(1f, 0.4f, 0.4f);
-                GUILayout.Label("✘ <b>MISS! (Hit when Marker is on Green)</b>", GetBoldLabelStyle(feedbackFontSize, labelH), GUILayout.Height(labelH));
-                GUI.color = Color.white;
+                case TimingResult.Perfect:
+                    fbStyle.normal.textColor = new Color(0.2f, 1.0f, 0.4f);
+                    GUI.Label(speedRow, "PERFECT! (BURST x1.25)", fbStyle);
+                    break;
+                case TimingResult.Good:
+                    fbStyle.normal.textColor = new Color(1.0f, 0.85f, 0.2f);
+                    GUI.Label(speedRow, "GOOD STROKE", fbStyle);
+                    break;
+                case TimingResult.Miss:
+                    fbStyle.normal.textColor = new Color(0.9f, 0.3f, 0.3f);
+                    GUI.Label(speedRow, "MISS", fbStyle);
+                    break;
             }
         }
-        else
+
+        // --- ANDROID ON-SCREEN TOUCH BUTTONS ---
+        if (showTouchControls)
         {
-            // Subtle guidance line to keep HUD height stable
-            GUI.color = new Color(0.75f, 0.85f, 0.95f, 0.65f);
-            GUILayout.Label($"<size={subFontSize}>Glide Rest: +0.5/s  |  Stroke Drain: -2.0/s  |  Press SPACE / Tap right to stroke</size>", GetBoldLabelStyle(subFontSize, labelH), GUILayout.Height(labelH));
-            GUI.color = Color.white;
+            DrawTouchControls(screenW, screenH, uiScale);
         }
+
+        GUI.backgroundColor = prevBg;
+        GUI.contentColor = prevContent;
     }
 
-    private void DrawProgressBar(float fill01, Color fillColor, float height)
+    private void DrawHorizontalBar(Rect rect, float fill01, Color fillColor, Color bgColor)
     {
-        Rect r = GUILayoutUtility.GetRect(20, height, GUILayout.Height(height));
-        // Background
-        GUI.color = new Color(0.12f, 0.12f, 0.18f, 0.95f);
-        GUI.DrawTexture(r, Texture2D.whiteTexture);
+        Color prev = GUI.color;
+        GUI.color = bgColor;
+        GUI.DrawTexture(rect, Texture2D.whiteTexture);
 
-        // Fill
-        GUI.color = fillColor;
-        Rect fillRect = new Rect(r.x, r.y, r.width * Mathf.Clamp01(fill01), r.height);
-        GUI.DrawTexture(fillRect, Texture2D.whiteTexture);
-        GUI.color = Color.white;
+        if (fill01 > 0f)
+        {
+            Rect fillRect = new Rect(rect.x, rect.y, rect.width * fill01, rect.height);
+            GUI.color = fillColor;
+            GUI.DrawTexture(fillRect, Texture2D.whiteTexture);
+        }
+        GUI.color = prev;
     }
 
-    private void DrawRhythmTimingBar(float height)
+    private void DrawRhythmBar(Rect rect, float marker01)
     {
-        Rect barRect = GUILayoutUtility.GetRect(24, height, GUILayout.Height(height));
+        Color prev = GUI.color;
 
-        // Bar background
-        GUI.color = new Color(0.12f, 0.14f, 0.20f, 0.95f);
-        GUI.DrawTexture(barRect, Texture2D.whiteTexture);
+        // Base track (Miss Zone)
+        GUI.color = new Color(0.18f, 0.20f, 0.26f, 0.95f);
+        GUI.DrawTexture(rect, Texture2D.whiteTexture);
 
         // Yellow Good Zone
-        float goodX = barRect.x + (perfectZoneCenter - goodZoneHalfWidth) * barRect.width;
-        float goodW = (goodZoneHalfWidth * 2f) * barRect.width;
-        GUI.color = new Color(0.85f, 0.75f, 0.15f, 0.85f);
-        GUI.DrawTexture(new Rect(goodX, barRect.y, goodW, barRect.height), Texture2D.whiteTexture);
+        float goodStart = Mathf.Clamp01(perfectZoneCenter - goodZoneHalfWidth);
+        float goodEnd = Mathf.Clamp01(perfectZoneCenter + goodZoneHalfWidth);
+        float goodX = rect.x + (rect.width * goodStart);
+        float goodW = rect.width * (goodEnd - goodStart);
+        Rect goodRect = new Rect(goodX, rect.y, goodW, rect.height);
+        GUI.color = new Color(0.85f, 0.72f, 0.15f, 0.80f);
+        GUI.DrawTexture(goodRect, Texture2D.whiteTexture);
 
         // Green Perfect Zone
-        float greenX = barRect.x + (perfectZoneCenter - perfectZoneHalfWidth) * barRect.width;
-        float greenW = (perfectZoneHalfWidth * 2f) * barRect.width;
-        GUI.color = new Color(0.1f, 0.95f, 0.35f, 0.95f);
-        GUI.DrawTexture(new Rect(greenX, barRect.y, greenW, barRect.height), Texture2D.whiteTexture);
+        float perfStart = Mathf.Clamp01(perfectZoneCenter - perfectZoneHalfWidth);
+        float perfEnd = Mathf.Clamp01(perfectZoneCenter + perfectZoneHalfWidth);
+        float perfX = rect.x + (rect.width * perfStart);
+        float perfW = rect.width * (perfEnd - perfStart);
+        Rect perfRect = new Rect(perfX, rect.y, perfW, rect.height);
+        GUI.color = new Color(0.15f, 0.90f, 0.35f, 0.95f);
+        GUI.DrawTexture(perfRect, Texture2D.whiteTexture);
 
-        // Moving Marker (Red Line Pointer)
-        float markerWidth = Mathf.Clamp(barRect.width * 0.012f, 4f, 10f);
-        float markerX = barRect.x + (rhythmMarkerPos * barRect.width) - (markerWidth * 0.5f);
-        GUI.color = Color.red;
-        GUI.DrawTexture(new Rect(markerX, barRect.y - 2f, markerWidth, barRect.height + 4f), Texture2D.whiteTexture);
+        // Moving Marker Indicator
+        float markerX = rect.x + (rect.width * marker01) - 4f;
+        Rect markerRect = new Rect(markerX, rect.y - 2f, 8f, rect.height + 4f);
         GUI.color = Color.white;
+        GUI.DrawTexture(markerRect, Texture2D.whiteTexture);
+
+        GUI.color = prev;
     }
 
-    private void DrawAndroidTouchHUD(float screenW, float screenH, float uiScale)
+    private void DrawTouchControls(float screenW, float screenH, float uiScale)
     {
-        float btnW = Mathf.Clamp(95f * uiScale, 55f, 150f);
-        float btnH = Mathf.Clamp(46f * uiScale, 28f, 75f);
-        float strokeBtnW = Mathf.Clamp(135f * uiScale, 80f, 210f);
-        float strokeBtnH = Mathf.Clamp(56f * uiScale, 34f, 90f);
-        float margin = Mathf.Clamp(12f * uiScale, 6f, 22f);
+        float btnSize = Mathf.Clamp(72f * uiScale, 50f, 96f);
+        float marginX = Mathf.Clamp(20f * uiScale, 12f, 32f);
+        float marginY = Mathf.Clamp(20f * uiScale, 12f, 32f);
 
-        int navFontSize = Mathf.Clamp(Mathf.RoundToInt(13f * uiScale), 9, 20);
-        int strokeFontSize = Mathf.Clamp(Mathf.RoundToInt(14f * uiScale), 10, 22);
-        int strokeSubFontSize = Mathf.Clamp(Mathf.RoundToInt(8f * uiScale), 7, 13);
+        // 1. Left Steering Button
+        Rect leftRect = new Rect(marginX, screenH - marginY - btnSize, btnSize, btnSize);
+        // 2. Right Steering Button
+        Rect rightRect = new Rect(marginX + btnSize + 12f, screenH - marginY - btnSize, btnSize, btnSize);
 
-        // Bottom Left: Steering buttons
-        Rect leftSteerRect = new Rect(margin, screenH - btnH - margin, btnW, btnH);
-        Rect rightSteerRect = new Rect(margin + btnW + (6f * uiScale), screenH - btnH - margin, btnW, btnH);
-
-        GUI.color = new Color(0.12f, 0.18f, 0.28f, 0.85f);
-        if (GUI.RepeatButton(leftSteerRect, $"<size={navFontSize}><b>◄ LEFT</b></size>"))
+        GUIStyle steerBtnStyle = new GUIStyle(GUI.skin.button)
         {
-            touchSteerHeld = -1.0f;
-        }
-        else if (GUI.RepeatButton(rightSteerRect, $"<size={navFontSize}><b>RIGHT ►</b></size>"))
+            fontSize = Mathf.Clamp(Mathf.RoundToInt(22f * uiScale), 14, 28),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        steerBtnStyle.normal.textColor = Color.white;
+
+        // Holding left/right steer buttons
+        bool leftHeld = GUI.RepeatButton(leftRect, "◄", steerBtnStyle);
+        bool rightHeld = GUI.RepeatButton(rightRect, "►", steerBtnStyle);
+
+        if (leftHeld) touchSteerHeld = -1f;
+        else if (rightHeld) touchSteerHeld = 1f;
+        else touchSteerHeld = 0f;
+
+        // 3. Prominent Stroke Button on Right Screen
+        float strokeSize = Mathf.Clamp(92f * uiScale, 64f, 120f);
+        Rect strokeRect = new Rect(screenW - marginX - strokeSize, screenH - marginY - strokeSize, strokeSize, strokeSize);
+
+        float distFromCenter = Mathf.Abs(rhythmMarkerPos - perfectZoneCenter);
+        bool isInGreen = distFromCenter <= perfectZoneHalfWidth;
+
+        Color prevBg = GUI.backgroundColor;
+        GUI.backgroundColor = isInGreen ? new Color(0.2f, 0.95f, 0.4f, 0.95f) : new Color(0.15f, 0.25f, 0.40f, 0.85f);
+
+        GUIStyle strokeBtnStyle = new GUIStyle(GUI.skin.button)
         {
-            touchSteerHeld = 1.0f;
-        }
-        else
-        {
-            touchSteerHeld = 0.0f;
-        }
+            fontSize = Mathf.Clamp(Mathf.RoundToInt(15f * uiScale), 11, 22),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+        strokeBtnStyle.normal.textColor = isInGreen ? Color.black : Color.white;
 
-        // Bottom Right: Prominent STROKE Button (Tap on Green)
-        Rect strokeRect = new Rect(screenW - strokeBtnW - margin, screenH - strokeBtnH - margin, strokeBtnW, strokeBtnH);
-
-        // Pulse button green when marker is in green zone
-        bool inGreen = Mathf.Abs(rhythmMarkerPos - perfectZoneCenter) <= perfectZoneHalfWidth;
-        GUI.color = inGreen ? new Color(0.15f, 0.95f, 0.35f, 0.95f) : new Color(0.15f, 0.65f, 0.95f, 0.85f);
-
-        if (GUI.Button(strokeRect, $"<size={strokeFontSize}><b>[ STROKE ]</b></size>\n<size={strokeSubFontSize}><b>TAP ON GREEN</b></size>"))
+        string strokeContent = isInGreen ? "★ STROKE ★" : "STROKE";
+        if (GUI.Button(strokeRect, strokeContent, strokeBtnStyle))
         {
             PerformStrokeWithTiming();
         }
 
-        GUI.color = Color.white;
-    }
-
-    private GUIStyle GetBoldLabelStyle(int fontSize = 13, float fixedHeight = 0)
-    {
-        GUIStyle style = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = fontSize,
-            fontStyle = FontStyle.Normal,
-            padding = new RectOffset(0, 0, 0, 0),
-            margin = new RectOffset(0, 0, 0, 0),
-            alignment = TextAnchor.MiddleLeft
-        };
-        if (fixedHeight > 0)
-        {
-            style.fixedHeight = fixedHeight;
-        }
-        style.normal.textColor = Color.white;
-        return style;
+        GUI.backgroundColor = prevBg;
     }
 
     #endregion

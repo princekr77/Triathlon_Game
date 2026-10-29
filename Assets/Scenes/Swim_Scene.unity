@@ -389,7 +389,7 @@ MonoBehaviour:
   finishLineTrigger: {fileID: 130000003}
   runStartSpawnPosition: {x: 164.06197, y: 11.97836, z: 477.7492}
   runStartSpawnEuler: {x: 0, y: 180, z: 0}
-  swimSpawnPosition: {x: 161.3, y: 12.25, z: 470}
+  swimSpawnPosition: {x: 161.3, y: 9.93, z: 470}
   swimSpawnEuler: {x: 0, y: 180, z: 0}
   runExitSpawnPosition: {x: 161.3, y: 23.7, z: 234.57}
   runExitSpawnEuler: {x: 0, y: 180, z: 0}
@@ -626,7 +626,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5441324752955018064, guid: 85a355f45dc4ecd43a6bf7c16db6698c, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 12.25
+      value: 9.93
       objectReference: {fileID: 0}
     - target: {fileID: 5441324752955018064, guid: 85a355f45dc4ecd43a6bf7c16db6698c, type: 3}
       propertyPath: m_LocalPosition.z
