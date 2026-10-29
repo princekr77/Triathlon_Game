@@ -16,7 +16,7 @@ public class RunnerCameraFollow : MonoBehaviour
     public bool useCurrentScenePosition = true;
 
     [Tooltip("Camera offset relative to runner heading (X: lateral, Y: height, Z: forward/back). Auto-calculated if useCurrentScenePosition is true.")]
-    public Vector3 offset = new Vector3(0f, 4.0f, -6.0f);
+    public Vector3 offset = new Vector3(0f, 2.9f, -5.4f);
 
     [Header("Rotation Settings")]
     [Tooltip("If true, maintains the exact Scene camera angle and orientation.")]
@@ -27,13 +27,13 @@ public class RunnerCameraFollow : MonoBehaviour
 
     [Header("Smooth Speeds")]
     [Tooltip("Catch-up speed along the forward axis.")]
-    public float forwardSmoothSpeed = 16.0f;
+    public float forwardSmoothSpeed = 22.0f;
 
     [Tooltip("Smooth speed for lateral (X) movements.")]
-    public float lateralSmoothSpeed = 10.0f;
+    public float lateralSmoothSpeed = 8.0f;
 
     [Tooltip("Smooth speed for vertical (Y) movements.")]
-    public float verticalSmoothSpeed = 10.0f;
+    public float verticalSmoothSpeed = 8.0f;
 
     [Tooltip("Smooth speed for camera rotation.")]
     public float rotationSmoothSpeed = 8.0f;
@@ -64,15 +64,19 @@ public class RunnerCameraFollow : MonoBehaviour
 
         initialRotation = transform.rotation;
 
-        if (target != null && useCurrentScenePosition)
+        if (target != null)
         {
-            // Capture the real camera position relative to the player's horizontal orientation
             Quaternion targetHeading = Quaternion.Euler(0f, target.eulerAngles.y, 0f);
-            offset = Quaternion.Inverse(targetHeading) * (transform.position - target.position);
-            initialized = true;
-        }
-        else if (target != null)
-        {
+            if (useCurrentScenePosition)
+            {
+                // Capture the real camera position relative to the player's horizontal orientation
+                offset = Quaternion.Inverse(targetHeading) * (transform.position - target.position);
+            }
+            else
+            {
+                // Align camera to calibrated offset immediately to prevent start pop
+                transform.position = target.position + (targetHeading * offset);
+            }
             initialized = true;
         }
     }
