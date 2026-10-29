@@ -8,10 +8,18 @@ public class MainMenuControllerEditor : Editor
     {
         DrawDefaultInspector();
 
-        EditorGUILayout.Space(10);
-        if (GUILayout.Button("Link Start Button to Run_Scene", GUILayout.Height(30)))
+        EditorGUILayout.Space(15);
+        GUI.backgroundColor = new Color(0.2f, 0.7f, 1f);
+        if (GUILayout.Button("Rebuild Menu Panel UI Layout", GUILayout.Height(36)))
         {
-            MenuPanelSetup.SetupMenuController();
+            MenuPanelBuilder.BuildMenuPanelUI();
         }
+        GUI.backgroundColor = Color.white;
+    }
+
+    [MenuItem("CONTEXT/MainMenuController/Rebuild Menu Panel UI")]
+    private static void RebuildMenuContext(MenuCommand command)
+    {
+        MenuPanelBuilder.BuildMenuPanelUI();
     }
 }
